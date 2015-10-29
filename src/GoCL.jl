@@ -71,7 +71,7 @@ print(io::IO, b::Board) = print(io, join(fmtboard(b), "\n"))
 end
 
 function lowest_empty_group(g::Groups)
-    groups = zeroes(UInt8, 255)
+    groups = zeros(UInt8, 255)
     @forall_fold i j ((a, b) -> a > 0 ? a : b) groups begin
         for k = i+(j-1)*19:19*19:255
             groups[k] = k
@@ -117,7 +117,7 @@ print(io::IO, g::Groups) = print(io, join(fmtboard(g), "\n"))
 end
 
 function check_and_delete_group!(p::Position, t::Point, x, y)
-    alive = zeroes(Bool, 19, 19)
+    alive = zeros(Bool, 19, 19)
     group = p.groups.index[x, y]
     if @forall_fold i j any alive begin
         if p.groups.index[i, j] == group
