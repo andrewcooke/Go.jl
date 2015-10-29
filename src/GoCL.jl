@@ -11,6 +11,8 @@ using AutoHashEquals
 import Base: ==, print
 
 
+# execute the same code at eahc point on the board (tries to guarantee that
+# the julia code is structured similarly to an opencl kernel).
 macro forall(i, j, block)
     :(for $(esc(i)) in 1:19
           for $(esc(j)) in 1:19
@@ -19,6 +21,8 @@ macro forall(i, j, block)
       end)
 end
 
+# as forall, but also include a final reduction (again, easy to implement in a
+# kernel).
 macro forall_fold(i, j, f, r, block)
     :(for $(esc(i)) in 1:19
           for $(esc(j)) in 1:19
@@ -116,7 +120,7 @@ print(io::IO, g::Groups) = print(io, join(fmtboard(g), "\n"))
     Position(p::Position) = new(Board(p.board), Groups(p.groups))
 end
 
-function check_and_delete_group!(p::Position, t::Point, x, y)
+function check_and_delete_group!(p::Position, x, y)
     alive = zeros(Bool, 19, 19)
     group = p.groups.index[x, y]
     if ! @forall_fold i j (x,y) -> any([x,y]) alive begin
@@ -151,7 +155,7 @@ function move!(p::Position, t::Point, x, y)
             if tt == t
                 replace_group!(p.groups, newgroup, xx, yy)
             elseif tt == other(t)
-                check_and_delete_group!(p, tt, xx, yy)
+                check_and_delete_group!(p, xx, yy)
             end
         end
     end
