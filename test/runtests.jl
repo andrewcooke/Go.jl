@@ -2,6 +2,16 @@
 using GoCL
 using Base.Test
 
+a = ones(UInt8, 19, 19)
+b = zeros(UInt8, 19, 19)
+@forall i j begin
+    b[i, j] = 2 * a[i, j]
+end
+@test b == 2a
+c = @forall_reduce i j (+) b begin
+    b[i, j] = 3 * a[i, j]
+end
+@test c == 3 * 19 * 19
 
 board = Board()
 @test length(board.rows) == 19
