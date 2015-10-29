@@ -32,6 +32,17 @@ macro forall_fold(i, j, f, r, block)
       foldl($(esc(f)), $(esc(r))))
 end
 
+# iterate over neigbours - explicit loop (not parallelized) (to reduce board
+# lookup dx=0 shoul dbe grouped)
+macro forneighbours(x, y, xx, yy, block)
+    :(for (dx, dy) in ((0, 1), (0, -1), (1, 0), (-1, 0))
+          $(esc(xx)), $(esc(yy)) = $(esc(x)) + dx, $(esc(y)) + dy      
+          if $(esc(xx)) > 0 && $(esc(xx)) <= 19 && $(esc(yy)) > 0 && $(esc(yy)) <= 19
+              $(esc(block))
+          end
+      end)
+end
+
 
 # empty is zero means that an empty Row is zero too
 @enum Point empty black white
@@ -125,12 +136,9 @@ function check_and_delete_group!(p::Position, x, y)
     group = p.groups.index[x, y]
     if ! @forall_fold i j (x,y) -> any([x,y]) alive begin
         if p.groups.index[i, j] == group
-            for (dx, dy) in ((0, 1), (0, -1), (1, 0), (-1, 0))
-                xx, yy = x + dx, y + dy      
-                if xx > 0 && xx <= 19 && yy > 0 && yy <= 19
-                    if point(p.board, xx, yy) == empty
-                        alive[i, j] = true
-                    end
+            @forneighbours x y xx yy begin
+                if point(p.board, xx, yy) == empty
+                    alive[i, j] = true
                 end
             end
         end
@@ -148,15 +156,12 @@ function move!(p::Position, t::Point, x, y)
     move!(p.board, t, x, y)
     newgroup = lowest_empty_group(p.groups)
     p.groups.index[x, y] = newgroup
-    for (dx, dy) in ((0, 1), (0, -1), (1, 0), (-1, 0))
-        xx, yy = x + dx, y + dy      
-        if xx > 0 && xx <= 19 && yy > 0 && yy <= 19
-            tt = point(p.board, xx, yy)
-            if tt == t
-                replace_group!(p.groups, newgroup, xx, yy)
-            elseif tt == other(t)
-                check_and_delete_group!(p, xx, yy)
-            end
+    @forneighbours x y xx yy begin
+        tt = point(p.board, xx, yy)
+        if tt == t
+            replace_group!(p.groups, newgroup, xx, yy)
+        elseif tt == other(t)
+            check_and_delete_group!(p, xx, yy)
         end
     end
 end
