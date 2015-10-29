@@ -119,7 +119,7 @@ end
 function check_and_delete_group!(p::Position, t::Point, x, y)
     alive = zeros(Bool, 19, 19)
     group = p.groups.index[x, y]
-    if @forall_fold i j any alive begin
+    if ! @forall_fold i j (x,y) -> any([x,y]) alive begin
         if p.groups.index[i, j] == group
             for (dx, dy) in ((0, 1), (0, -1), (1, 0), (-1, 0))
                 xx, yy = x + dx, y + dy      
@@ -131,6 +131,7 @@ function check_and_delete_group!(p::Position, t::Point, x, y)
             end
         end
     end
+        move!(p.board, empty, x, y)
         @forall i j begin
             if p.groups.index[i, j] == group
                 p.groups.index[i, j] = 0
@@ -146,9 +147,9 @@ function move!(p::Position, t::Point, x, y)
     for (dx, dy) in ((0, 1), (0, -1), (1, 0), (-1, 0))
         xx, yy = x + dx, y + dy      
         if xx > 0 && xx <= 19 && yy > 0 && yy <= 19
-            tt = point(b, xx, yy)
+            tt = point(p.board, xx, yy)
             if tt == t
-                replace_group!(g, newgroup, xx, yy)
+                replace_group!(p.groups, newgroup, xx, yy)
             elseif tt == other(t)
                 check_and_delete_group!(p, tt, xx, yy)
             end
