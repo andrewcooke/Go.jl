@@ -125,6 +125,7 @@ end
 # --- display
 
 
+"""the location of board markers (dots)."""
 const markers = Set([4, 10, 16])
 
 function fmtrow(r::Row, y)
@@ -182,6 +183,9 @@ end
 # --- update state on move
 
 
+"""groups (in Greoups.index) are numbered from 1 (0 is for empty
+spaces).  this routine returns the smallest number > 0 that is unused
+(so it can be used to label a new group)."""
 function lowest_empty_group(g::Groups)
     groups = zeros(UInt8, 255)
     @forall_fold i j ((a, b) -> a > 0 ? a : b) 0 groups begin
@@ -199,6 +203,7 @@ function lowest_empty_group(g::Groups)
     end
 end
 
+"""replace the group at (x,y) with newgroup.  used to merge groups."""
 function replace_group!(g::Groups, newgroup, x, y)
     oldgroup = g.index[x, y]
     @forall i j begin
@@ -208,6 +213,9 @@ function replace_group!(g::Groups, newgroup, x, y)
     end
 end
 
+"""check whether the group at (x, y) is dead.  if so, remove it from
+Groups.index and set Flood.distances to zero (these are later replaced
+in flood_dead_group!)."""
 function check_and_delete_group!(p::Position, x, y)
     alive = zeros(Bool, 19, 19)
     # the group we want to check
@@ -237,6 +245,7 @@ function check_and_delete_group!(p::Position, x, y)
     end
 end
 
+"""replace Flood.distances that have been zeroed."""
 function flood_dead_group!(f::Flood, b::Board, t::Point)
     while ! @forall_fold i j (a,b) -> (a || b!=0) false f.distances begin
         if f.distances[i, j] == 0
@@ -258,6 +267,11 @@ function flood_dead_group!(f::Flood, b::Board, t::Point)
     end
 end
 
+"""update Flood.distances when a stone is played.  this is done by
+moving from each point towards the new stone.  if the path reaches the
+stone without meeting any other, and the distance is less than the
+current value, then it is updated.  i am not completely sure this is
+exact, but it appears to work ok."""
 function flood_to_point!(f::Flood, b::Board, t::Point, x, y)
     @forall i j begin
         if point(b, i, j) == empty
@@ -283,6 +297,7 @@ function flood_to_point!(f::Flood, b::Board, t::Point, x, y)
     end
 end
 
+"""update the row to include the given Point."""
 function move(row::Row, t::Point, x) 
     k = 3^(x-1)
     l, r = divrem(row, k)
@@ -290,10 +305,15 @@ function move(row::Row, t::Point, x)
     l * k + r
 end
 
+"""update the board to include the given point."""
 move!(b::Board, t::Point, x, y) = b.rows[y] = move(b.rows[y], t, x)
 
+"""update Flood.distances to include the given point (only - full
+flood update requires flood_dead_group! and flood_to_point!)."""
 move!(f::Flood, t::Point, x, y) = f.distances[x, y] = Int8(t)
 
+"""update the position, given a new point.  this includes all
+processing."""
 function move!(p::Position, t::Point, x, y)
     move!(p.board, t, x, y)
     move!(p.flood, t, x, y)
