@@ -8,7 +8,7 @@ b = zeros(UInt32, 19, 19)
     b[i, j] = 2 * a[i, j]
 end
 @test b == 2a
-c = @forall_fold i j (+) b begin
+c = @forall_fold i j (+) 0 b begin
     b[i, j] = 3 * a[i, j]
 end
 @test c == 3 * 19 * 19
