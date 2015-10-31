@@ -213,6 +213,15 @@ function flood_to_point!(f::Flood, b::Board, t::Point, x, y)
     end
 end
 
+function move(row::Row, t::Point, x) 
+    k = 3^(x-1)
+    l, r = divrem(row, k)
+    l = 3 * div(l, 3) + Row(Int(t)+1)
+    l * k + r
+end
+
+move!(b::Board, t::Point, x, y) = b.rows[y] = move(b.rows[y], t, x)
+
 function move!(p::Position, t::Point, x, y)
     move!(p.board, t, x, y)
     flood_to_point!(p.flood, p.board, t, x, y)
@@ -228,15 +237,6 @@ function move!(p::Position, t::Point, x, y)
     end
     flood_dead_group!(p.flood, p.board, t)
 end
-
-function move(row::Row, t::Point, x) 
-    k = 3^(x-1)
-    l, r = divrem(row, k)
-    l = 3 * div(l, 3) + Row(Int(t)+1)
-    l * k + r
-end
-
-move!(b::Board, t::Point, x, y) = b.rows[y] = move(b.rows[y], t, x)
 
 
 end
