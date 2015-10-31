@@ -13,54 +13,26 @@ c = @forall_fold i j (+) 0 b begin
 end
 @test c == 3 * 19 * 19
 
-board = Board()
-@test length(board.rows) == 19
-@test point(board, 1, 1) == empty
-@test point(board, 19, 19) == empty
-move!(board, black, 10, 10)
-@test point(board, 10, 10) == black
-move!(board, white, 12, 11)
-@test sprint(print, board) == """. . . . . . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . . . . . .
-. . . + . . . . . + . . . . . + . . .
-. . . . . . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . . . . . .
-. . . . . . . . . . . O . . . . . . .
-. . . + . . . . . X . . . . . + . . .
-. . . . . . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . . . . . .
-. . . + . . . . . + . . . . . + . . .
-. . . . . . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . . . . . .
-. . . . . . . . . . . . . . . . . . ."""
+b = Board()
+@test length(b.rows) == 19
+@test point(b, 1, 1) == empty
+@test point(b, 19, 19) == empty
+move!(b, black, 10, 10)
+@test point(b, 10, 10) == black
+move!(b, white, 12, 11)
+s = sprint(print, b)
+#io = open("print-board.txt", "w")
+#print(io, b)
+#close(io)
+@test s == open(readall, "print-board.txt", "r")
 
 p = Position()
 move!(p, black, 5, 5)
 for (x,y) in ((5,6),(6,6),(6,5),(5,4),(4,5))
     move!(p, white, x, y)
 end
-@test sprint(print, p) == """. . . . . . . . . . . . . . . . . . .                                       
-. . . . . . . . . . . . . . . . . . .                                       
-. . . . . . . . . . . . . . . . . . .                                       
-. . . + . . . . . + . . . . . + . . .       __          __          __      
-. . . . . . . . . . . . . . . . . . .                                       
-. . . . . . . . . . . . . . . . . . .                                       
-. . . . . . . . . . . . . . . . . . .                                       
-. . . . . . . . . . . . . . . . . . .                                       
-. . . . . . . . . . . . . . . . . . .                                       
-. . . + . . . . . + . . . . . + . . .       __          __          __      
-. . . . . . . . . . . . . . . . . . .                                       
-. . . . . . . . . . . . . . . . . . .                                       
-. . . . . . . . . . . . . . . . . . .                                       
-. . . . O O . . . . . . . . . . . . .          2 2                          
-. . . O . O . . . . . . . . . . . . .        4   2                          
-. . . + O . . . . + . . . . . + . . .       __ 3        __          __      
-. . . . . . . . . . . . . . . . . . .                                       
-. . . . . . . . . . . . . . . . . . .                                       
-. . . . . . . . . . . . . . . . . . .                                       """
+s = sprint(print, p)
+#io = open("print-position.txt", "w")
+#print(io, p)
+#close(io)
+@test s == open(readall, "print-position.txt", "r")

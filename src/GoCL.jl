@@ -111,11 +111,32 @@ fmtboard(g::Groups) = map(y -> fmtrow(g, y), 19:-1:1)
 
 print(io::IO, g::Groups) = print(io, join(fmtboard(g), "\n"))
 
-print(io::IO, p::Position) = 
-print(io, 
-      join(map(x -> join(x, " "), 
-               zip(fmtboard(p.board), 
-                   fmtboard(p.groups))), "\n"))
+function fmtrow(f::Flood, y)
+    function fmt(x)
+        d = f.distances[x, y]
+        if abs(d) < 10
+            @sprintf("%2d", d)
+        elseif d > 0
+            string(" ", Char(Int('a') + d - 10))
+        else
+            string(" ", Char(Int('A') - d - 10))
+        end
+    end
+    join(map(fmt, 1:19))
+end
+fmtboard(f::Flood) = map(y -> fmtrow(f, y), 19:-1:1)
+
+print(io::IO, f::Flood) = print(io, join(fmtboard(f), "\n"))
+
+function print(io::IO, p::Position)
+    print(io, 
+          join(map(x -> join(x, " "), 
+                   zip(fmtboard(p.board), 
+                       fmtboard(p.groups))), "\n"))
+    print(io, "\n")
+    print(io, "\n")
+    print(io, p.flood)
+end
 
 
 function lowest_empty_group(g::Groups)
@@ -179,7 +200,10 @@ function flood_dead_group!(f::Flood, b::Board, t::Point)
            # find closest neighbour
            mind = 256
            @forneighbours i j ii jj begin
-               mind = min(mind, abs(f.distances[i, j]))
+               d = f.distances[ii, jj]
+               if d != 0
+                   mind = min(mind, abs(d))
+               end
            end
            # if we have a neighbour, add one to that
            if mind < 256
@@ -193,21 +217,24 @@ end
 
 function flood_to_point!(f::Flood, b::Board, t::Point, x, y)
     @forall i j begin
-        if point(b, x, y) == empty
+        if point(b, i, j) == empty
             ii, jj, d = i, j, 1
             while true
-                di, dj, d = i-x, j-y, d+1
+                di, dj, d = x-ii, y-jj, d+1
                 if abs(di) >= abs(dj)
-                    ii = ii + sgn(di)
+                    ii = ii + sign(di)
                 else
-                    jj = jj + sgn(dj)
+                    jj = jj + sign(dj)
                 end
                 if point(b, ii, jj) != empty
                     break
                 end
             end
             if ii == x && jj == y
-                f.distance[i, j] = d * Int(t)
+                prev = f.distances[i, j]
+                if prev == 0 || abs(d) < abs(prev)
+                    f.distances[i, j] = d * Int(t)
+                end
             end
         end
     end
@@ -222,8 +249,11 @@ end
 
 move!(b::Board, t::Point, x, y) = b.rows[y] = move(b.rows[y], t, x)
 
+move!(f::Flood, t::Point, x, y) = f.distances[x, y] = Int8(t)
+
 function move!(p::Position, t::Point, x, y)
     move!(p.board, t, x, y)
+    move!(p.flood, t, x, y)
     flood_to_point!(p.flood, p.board, t, x, y)
     newgroup = lowest_empty_group(p.groups)
     p.groups.index[x, y] = newgroup
