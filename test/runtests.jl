@@ -54,3 +54,9 @@ end
 io = open("random-position.txt", "w")
 print(io, p)
 close(io)
+out = zeros(Int8, 19, 19)
+div = Int8[0 -1 0; -1 4 -1; 0 -1 0]
+println(div)
+convolve(p.flood.distances, 1, div, out)
+blank!(out, p)
+println(fix(out))
