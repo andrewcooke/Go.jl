@@ -12,9 +12,7 @@ An experimental engine to play
 
 * Need a set of core operations that are fast and scalable.
 
-* Combine those with tunable heuristics.  For example, select next plays from
-  a probability function that is constructed using a tunable kernel convolved
-  with some reasonable base distribution.
+* On top of that, a good transformation layer and a relatively simple net.
 
 * Tune via self-competition.
 
@@ -28,3 +26,27 @@ An experimental engine to play
 * Flood fill can be fast when the board description is small enough to be
   stored in an APU (bitmaps).
 
+## Transform Ideas
+
+* First derivative of flood gives a good basis for tactical moves.
+
+* Need something for short-range.  What?  Soemthing connected to
+  1/second dertivative of flood?  Perhaps restricted to +ve,
+  recalculated for -ve, and then subtracted?
+
+* The aim is to get decent input into the net, then output from the
+  net that defines a probability over the points.  Finally, sample
+  from that (at random, or equally spaced) to get moves for the
+  search.
+
+## Scoring Ideas
+
+* Can we count all spaces inside a group efficiently?
+
+* Also need prisoner scores.
+
+## Tournament Ideas
+
+* Must plot something to track.  What?
+
+* How can we extend the net, while still keeping the original training?
