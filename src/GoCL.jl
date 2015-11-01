@@ -72,12 +72,6 @@ emptyrow = Row(sum([3^(n-1) for n in 1:19]))
     Board(b::Board) = new(copy(b.rows))
 end
 
-"""extract the point at a given (x, y)."""
-point(r::Row, x) = Point(mod(div(r, 3^(x-1)), 3)-1)
-
-"""extract the point at a given (x, y)."""
-point(b::Board, x, y) = point(b.rows[y], x)
-
 
 """identify all points common to a single group.
 
@@ -122,6 +116,19 @@ Groups and Flood."""
 end
 
 
+# --- points
+
+
+"""extract the point at a given (x, y)."""
+point(r::Row, x) = Point(mod(div(r, 3^(x-1)), 3)-1)
+
+"""extract the point at a given (x, y)."""
+point(b::Board, x, y) = point(b.rows[y], x)
+
+"""extract the point at a given (x, y)."""
+point(p::Position, x, y) = point(p.board, x, y)
+
+
 # --- display
 
 
@@ -130,7 +137,9 @@ const markers = Set([4, 10, 16])
 
 function fmtrow(r::Row, y)
     fmt(x) = (y in markers && x in markers ? "O+X" : "O.X")[2+Int(point(r, x))]
-    join(map(fmt, 1:19), " ")
+    # extra space aligns with other components that use 2 characters
+    # per point
+    string(" ", join(map(fmt, 1:19), " "))
 end
 fmtboard(b::Board) = map(y -> fmtrow(b.rows[y], y), 19:-1:1)
 
@@ -139,7 +148,7 @@ print(io::IO, b::Board) = print(io, join(fmtboard(b), "\n"))
 function fmtrow(g::Groups, y)
     function fmt(x)
         if g.index[x, y] > 0
-            @sprintf("%2x", g.index[x, y])
+            @sprintf("%02X", g.index[x, y])
         elseif y in markers && x in markers
             "__"
         else
@@ -187,12 +196,8 @@ end
 spaces).  this routine returns the smallest number > 0 that is unused
 (so it can be used to label a new group)."""
 function lowest_empty_group(g::Groups)
-    groups = zeros(UInt8, 255)
+    groups = collect(UInt8, 1:255)
     @forall_fold i j ((a, b) -> a > 0 ? a : b) 0 groups begin
-        # set groups to count from 1 to 255
-        for k = i+(j-1)*19:19*19:255
-            groups[k] = k
-        end
         # zero out any groups that exist
         group = g.index[i, j]
         if group > 0

@@ -36,3 +36,21 @@ s = sprint(print, p)
 #print(io, p)
 #close(io)
 @test s == open(readall, "print-position.txt", "r")
+
+srand(1)
+p = Position()
+for i in 1:60
+    for t in (black, white)
+        x, y = 0, 0
+        while true
+            x, y = rand(1:19), rand(1:19)
+            if point(p, x, y) == empty
+                break
+            end
+        end
+        move!(p, t, x, y)
+    end
+end
+io = open("random-position.txt", "w")
+print(io, p)
+close(io)
