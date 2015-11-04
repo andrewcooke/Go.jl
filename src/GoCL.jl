@@ -78,21 +78,20 @@ emptyrow = Row(sum([3^(n-1) for n in 1:19]))
 
 """a trit-map of the entire board."""
 @auto_hash_equals immutable Board
-    rows::Vector{Row}
+    row::Vector{Row}
     Board() = new(fill(emptyrow, 19))
-    Board(b::Board) = new(copy(b.rows))
+    Board(b::Board) = new(copy(b.row))
 end
 
 
-"""identify all points common to a single group.
-
-this is an optimisation - a cached, updated summary, that makes other
-operations (updating the board on a move) more efficient.  it may not
-be necessary."""
+"""identify points common to a group and provide basic stats."""
 @auto_hash_equals immutable Groups
     index::Array{UInt8, 2}
-    Groups() = new(zeros(UInt8, 19, 19))
-    Groups(g::Groups) = new(copy(g.index))
+    # do we need to care about overflow here?
+    size::Array{UInt8, 1}
+    space::Array{UInt8, 1}
+    Groups() = new(zeros(UInt8, 19, 19), zeros(UInt8, 255), zeros(UInt8, 255))
+    Groups(g::Groups) = new(copy(g.index), copy(g.size), copy(g.space))
 end
 
 
@@ -109,9 +108,9 @@ this contains almost all the information about the state of play (the
 +/-1 values duplicate Board).  it may be used as input to a neural
 net."""
 @auto_hash_equals immutable Flood
-    distances::Array{Int8, 2}
+    distance::Array{Int8, 2}
     Flood() = new(zeros(Int8, 19, 19))
-    Flood(f::Flood) = new(copy(f.distances))
+    Flood(f::Flood) = new(copy(f.distance))
 end
 
 
@@ -134,7 +133,7 @@ end
 point(r::Row, x) = Point(mod(div(r, 3^(x-1)), 3)-1)
 
 """extract the point at a given (x, y)."""
-point(b::Board, x, y) = point(b.rows[y], x)
+point(b::Board, x, y) = point(b.row[y], x)
 
 """extract the point at a given (x, y)."""
 point(p::Position, x, y) = point(p.board, x, y)
@@ -152,7 +151,7 @@ function fmtrow(r::Row, y)
     # per point
     string(" ", join(map(fmt, 1:19), " "))
 end
-fmtboard(b::Board) = map(y -> fmtrow(b.rows[y], y), 19:-1:1)
+fmtboard(b::Board) = map(y -> fmtrow(b.row[y], y), 19:-1:1)
 
 print(io::IO, b::Board) = print(io, join(fmtboard(b), "\n"))
 
@@ -170,11 +169,25 @@ function fmtrow(g::Groups, y)
 end
 fmtboard(g::Groups) = map(y -> fmtrow(g, y), 19:-1:1)
 
-print(io::IO, g::Groups) = print(io, join(fmtboard(g), "\n"))
+stats_per_row = 4
+function fmtstats(g::Groups, row)
+    function fmt(col)
+        i = col + (row-1) * stats_per_row
+        @sprintf("%02x:%2d/%2d", i, g.space[i], g.size[i])
+    end
+    join(map(fmt, 1:stats_per_row), ", ")
+end
+fmtstats(g::Groups) = map(r -> fmtstats(g, r), 1:19)
+
+function print(io::IO, g::Groups)
+    print(io, join(fmtboard(g), "\n"))
+    print(io, "\n")
+    print(io, join(fmtstats(g), "\n"))
+end
 
 function fmtrow(f::Flood, y)
     function fmt(x)
-        d = f.distances[x, y]
+        d = f.distance[x, y]
         if abs(d) < 10
             @sprintf("%2d", d)
         elseif d > 0
@@ -191,19 +204,22 @@ print(io::IO, f::Flood) = print(io, join(fmtboard(f), "\n"))
 
 function print(io::IO, p::Position)
     print(io, 
-          join(map(x -> join(x, " "), 
+          join(map(x -> join(x, "  "), 
                    zip(fmtboard(p.board), 
                        fmtboard(p.groups))), "\n"))
     print(io, "\n")
     print(io, "\n")
-    print(io, p.flood)
+    print(io,
+          join(map(x -> join(x, "  "), 
+                   zip(fmtboard(p.flood), 
+                       fmtstats(p.groups))), "\n"))
 end
 
 
 # --- update state on move
 
 
-"""groups (in Greoups.index) are numbered from 1 (0 is for empty
+"""groups (in Groups.index) are numbered from 1 (0 is for empty
 spaces).  this routine returns the smallest number > 0 that is unused
 (so it can be used to label a new group)."""
 function lowest_empty_group(g::Groups)
@@ -219,18 +235,21 @@ function lowest_empty_group(g::Groups)
     end
 end
 
-"""replace the group at (x,y) with newgroup.  used to merge groups."""
-function replace_group!(g::Groups, newgroup, x, y)
+"""merge the group at (x,y) with newgroup."""
+function merge_group(g::Groups, newgroup, x, y)
     oldgroup = g.index[x, y]
-    @forall i j begin
-        if g.index[i, j] == oldgroup
-            g.index[i, j] = newgroup
+    if newgroup != oldgroup
+        g.size[newgroup], g.size[oldgroup] = g.size[newgroup] + g.size[oldgroup], 0
+        @forall i j begin
+            if g.index[i, j] == oldgroup
+                g.index[i, j] = newgroup
+            end
         end
     end
 end
 
 """check whether the group at (x, y) is dead.  if so, remove it from
-Groups.index and set Flood.distances to zero (these are later replaced
+Groups.index and set Flood.distance to zero (these are later replaced
 in flood_dead_group!)."""
 function check_and_delete_group!(p::Position, x, y)
     alive = zeros(Bool, 19, 19)
@@ -247,6 +266,7 @@ function check_and_delete_group!(p::Position, x, y)
         end
     end
         # if not alive
+        p.groups.size[group] = 0
         @forall i j begin
             if p.groups.index[i, j] == group
                 # remove stone
@@ -255,27 +275,27 @@ function check_and_delete_group!(p::Position, x, y)
                 # erase group index
                 p.groups.index[i, j] = 0
                 # set flood to special value (see flood_dead_group!)
-                p.flood.distances[i, j] = 0
+                p.flood.distance[i, j] = 0
             end
         end
     end
 end
 
-"""replace Flood.distances that have been zeroed."""
+"""replace Flood.distance values that have been zeroed."""
 function flood_dead_group!(f::Flood, b::Board, t::Point)
-    while ! @forall_fold i j (a,b) -> (a || b!=0) false f.distances begin
-        if f.distances[i, j] == 0
+    while ! @forall_fold i j (a,b) -> (a || b!=0) false f.distance begin
+        if f.distance[i, j] == 0
            # find closest neighbour
            mind = 256
            @forneighbours i j ii jj begin
-               d = f.distances[ii, jj]
+               d = f.distance[ii, jj]
                if d != 0
                    mind = min(mind, abs(d))
                end
            end
            # if we have a neighbour, add one to that
            if mind < 256
-               f.distances[i, j] = Int(t) * (mind+1)
+               f.distance[i, j] = Int(t) * (mind+1)
            end
        end
     end
@@ -283,7 +303,7 @@ function flood_dead_group!(f::Flood, b::Board, t::Point)
     end
 end
 
-"""update Flood.distances when a stone is played.  this is done by
+"""update Flood.distance when a stone is played.  this is done by
 moving from each point towards the new stone.  if the path reaches the
 stone without meeting any other, and the distance is less than the
 current value, then it is updated.  i am not completely sure this is
@@ -304,10 +324,35 @@ function flood_to_point!(f::Flood, b::Board, t::Point, x, y)
                 end
             end
             if ii == x && jj == y
-                prev = f.distances[i, j]
+                prev = f.distance[i, j]
                 if prev == 0 || abs(d) < abs(prev)
-                    f.distances[i, j] = d * Int(t)
+                    f.distance[i, j] = d * Int(t)
                 end
+            end
+        end
+    end
+end
+
+function calculate_space!(g::Groups)
+    for k in 1:19
+        g.space[k] = 0
+    end
+    # local vars
+    temp = zeros(UInt8, 19, 19, 4)
+    n = zeros(UInt8, 19, 19)
+    @forall i j begin
+        if g.index[i, j] == 0
+            @forneighbours i j ii jj begin
+                group = g.index[ii, jj]
+                # if group is not already known
+                if group != 0 && !any([group == temp[i, j, k] for k in 1:n[i, j]])
+                    n[i, j] = n[i, j] + 1
+                    temp[i, j, n[i, j]] = group
+                end
+            end
+            # thread group mem with memory guard
+            for k in 1:n[i, j]
+                g.space[temp[i, j, k]] = g.space[temp[i, j, k]] + 1
             end
         end
     end
@@ -322,11 +367,11 @@ function move(row::Row, t::Point, x)
 end
 
 """update the board to include the given point."""
-move!(b::Board, t::Point, x, y) = b.rows[y] = move(b.rows[y], t, x)
+move!(b::Board, t::Point, x, y) = b.row[y] = move(b.row[y], t, x)
 
-"""update Flood.distances to include the given point (only - full
+"""update Flood.distance to include the given point (only - full
 flood update requires flood_dead_group! and flood_to_point!)."""
-move!(f::Flood, t::Point, x, y) = f.distances[x, y] = Int8(t)
+move!(f::Flood, t::Point, x, y) = f.distance[x, y] = Int8(t)
 
 """update the position, given a new point.  this includes all
 processing."""
@@ -336,16 +381,29 @@ function move!(p::Position, t::Point, x, y)
     flood_to_point!(p.flood, p.board, t, x, y)
     newgroup = lowest_empty_group(p.groups)
     p.groups.index[x, y] = newgroup
+    p.groups.size[newgroup] = 1
     @forneighbours x y xx yy begin
         tt = point(p.board, xx, yy)
         if tt == t
-            replace_group!(p.groups, newgroup, xx, yy)
+            merge_group(p.groups, newgroup, xx, yy)
         elseif tt == other(t)
             check_and_delete_group!(p, xx, yy)
         end
     end
     flood_dead_group!(p.flood, p.board, t)
+    calculate_space!(p.groups)
 end
+
+
+# todo
+# number of spaces on a group - difficult to cache.  better to calculate.
+# size of spaces?  maybe not important - kindof available in flood fill.
+# good scoring (at least for end of game assessment, maybe then fold stuff into
+# pre-processing layer.
+# graphs, evolution, tournaments etc
+
+
+
 
 
 # --- convolution

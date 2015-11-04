@@ -14,7 +14,7 @@ end
 @test c == 3 * 19 * 19
 
 b = Board()
-@test length(b.rows) == 19
+@test length(b.row) == 19
 @test point(b, 1, 1) == empty
 @test point(b, 19, 19) == empty
 move!(b, black, 10, 10)
@@ -32,31 +32,48 @@ for (x,y) in ((5,6),(6,6),(6,5),(5,4),(4,5))
     move!(p, white, x, y)
 end
 s = sprint(print, p)
-#io = open("print-position.txt", "w")
-#print(io, p)
-#close(io)
-@test s == open(readall, "print-position.txt", "r")
-
-srand(1)
-p = Position()
-for i in 1:60
-    for t in (black, white)
-        x, y = 0, 0
-        while true
-            x, y = rand(1:19), rand(1:19)
-            if point(p, x, y) == empty
-                break
-            end
-        end
-        move!(p, t, x, y)
-    end
-end
-io = open("random-position.txt", "w")
+io = open("print-position.txt", "w")
 print(io, p)
 close(io)
-out = zeros(Int8, 19, 19)
-div = Int8[0 -1 0; -1 4 -1; 0 -1 0]
-println(div)
-convolve(p.flood.distances, 1, div, out)
-blank!(out, p)
-println(fix(out))
+@test s == open(readall, "print-position.txt", "r")
+@test p.groups.size[1] == 0
+@test p.groups.size[2] == 3
+@test p.groups.size[3] == 1
+@test p.groups.size[4] == 1
+
+p = Position()
+move!(p, black, 5, 5)
+io = open("print-group-0.txt", "w")
+print(io, p)
+close(io)
+# note (4,6) is shifted so get group join at print-group-4.txt
+for (i, (x,y)) in enumerate(((4,4),(4,5),(5,6),(4,6),(6,6),(6,5),(6,4),(5,4)))
+    move!(p, white, x, y)
+    io = open("print-group-$i.txt", "w")
+    print(io, p)
+    close(io)
+end
+
+#srand(1)
+#p = Position()
+#for i in 1:60
+#    for t in (black, white)
+#        x, y = 0, 0
+#        while true
+#            x, y = rand(1:19), rand(1:19)
+#            if point(p, x, y) == empty
+#                break
+#            end
+#        end
+#        move!(p, t, x, y)
+#    end
+#end
+#io = open("random-position.txt", "w")
+#print(io, p)
+#close(io)
+#out = zeros(Int8, 19, 19)
+#div = Int8[0 -1 0; -1 4 -1; 0 -1 0]
+#println(div)
+#convolve(p.flood.distance, 1, div, out)
+#blank!(out, p)
+#println(fix(out))
