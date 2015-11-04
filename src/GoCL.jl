@@ -5,10 +5,17 @@ export fix, @forall, @forall_fold,
        Point, black, empty, white, other,
        Board, point, move, move!,
        Position,
-       convolve, blank!
+       map_space, convolve, blank!
 
 using AutoHashEquals
 import Base: ==, print
+
+
+# todo
+# size of spaces?  maybe not important - kindof available in flood fill.
+# good scoring (at least for end of game assessment, maybe then fold stuff into
+# pre-processing layer.
+# graphs, evolution, tournaments etc
 
 
 # --- utilities
@@ -397,16 +404,6 @@ function move!(p::Position, t::Point, x, y)
 end
 
 
-# todo
-# size of spaces?  maybe not important - kindof available in flood fill.
-# good scoring (at least for end of game assessment, maybe then fold stuff into
-# pre-processing layer.
-# graphs, evolution, tournaments etc
-
-
-
-
-
 # --- convolution
 
 
@@ -438,6 +435,97 @@ function blank!(data, p::Position)
         end
     end
 end
+
+
+# --- scoring
+
+
+# grow boundaries inwards
+# expand conflicting values outwards
+# reduce to find score
+
+function boundary_mask(t::Point)
+    if t == empty
+        return 0
+    elseif t == black
+        return 1
+    else
+        return 2
+    end
+end
+
+function worse(s, b)
+end
+
+function map_space(p::Position)
+
+    # to make this incremental, we need to have two arrays
+    # 1 - an index that numbers spaces (so we know what to zero out)
+    # 2 - the border array as below
+    # then on a move we need to
+    # 1 - zero out the group that was where the move was
+    # 2 - expand out from the spaces connected there, propogating both
+    #     border and index number (merging to lowest)
+    # 3 - handle killed groups
+    # not sure this is worth it right now.  on the other hand, it gives an 
+    # extrea input array (space index), although not a particularly useful 
+    # one
+
+    # this is either zero (unfilled / group) or a bitmask, 1 for black, 2 for
+    # white, 3 for both
+    space = zeros(UInt8, 19, 19)   # thread group mem
+
+    # local vars
+    my_space = zeros(UInt8, 19, 19)
+    nsew = zeros(UInt8, 19, 19)   # bitmask of stones (to ignore in second round)
+
+    @forall i j begin
+        # only modify empty points
+        if point(p, i, j) == empty
+
+            # first round, set from boundary stones
+            k = zeros(UInt8, 19, 19)   # local var
+            @forneighbours i j ii jj begin
+                t = point(p, ii, jj)
+                my_space[i, j] = my_space[i, j] | boundary_mask(point(p, ii, jj))
+                if t != empty
+                    nsew[i, j] = nsew[i, j] | 2^k[i, j]
+                end
+                k[i, j] = k[i, j] + 1
+            end
+            space[i, j] = my_space[i, j]
+        end
+    end
+
+    # second round - update until consistent
+    changed = true   # thread group mem
+    while changed
+        changed = false
+        k = zeros(UInt8, 19, 19)   # local var
+        @forall i j begin
+            # only modify empty points
+            if point(p, i, j) == empty
+                @forneighbours i j ii jj begin
+                    # if not a stone
+                    if nsew[i, j] & 2^k[i, j] == 0
+                        s = space[ii, jj]
+                        l = my_space[i, j]
+                        # if neighbour unset, or already included in local value
+                        if !(s == 0 || s & l == s)
+                            changed = true
+                            my_space[i, j] = l | s
+                            space[i, j] = l | s
+                        end
+                    end
+                    k[i, j] = k[i, j] + 1
+                end
+            end
+
+        end
+    end
+    space
+end
+
 
 
 end

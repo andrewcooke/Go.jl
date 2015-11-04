@@ -54,6 +54,13 @@ for (i, (x,y)) in enumerate(((4,4),(4,5),(5,6),(4,6),(6,6),(6,5),(6,4),(5,4)))
     @test sprint(print, p) == open(readall, "print-group-$i.txt", "r")
 end
 
+for i in 1:10
+    move!(p, black, 11-i, 20-i)
+end
+println(p)
+s = map_space(p)
+println(fix(s))
+
 #srand(1)
 #p = Position()
 #for i in 1:60
