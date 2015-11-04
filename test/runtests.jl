@@ -20,22 +20,20 @@ b = Board()
 move!(b, black, 10, 10)
 @test point(b, 10, 10) == black
 move!(b, white, 12, 11)
-s = sprint(print, b)
 #io = open("print-board.txt", "w")
 #print(io, b)
 #close(io)
-@test s == open(readall, "print-board.txt", "r")
+@test sprint(print, b) == open(readall, "print-board.txt", "r")
 
 p = Position()
 move!(p, black, 5, 5)
 for (x,y) in ((5,6),(6,6),(6,5),(5,4),(4,5))
     move!(p, white, x, y)
 end
-s = sprint(print, p)
-io = open("print-position.txt", "w")
-print(io, p)
-close(io)
-@test s == open(readall, "print-position.txt", "r")
+#io = open("print-position.txt", "w")
+#print(io, p)
+#close(io)
+@test sprint(print, p) == open(readall, "print-position.txt", "r")
 @test p.groups.size[1] == 0
 @test p.groups.size[2] == 3
 @test p.groups.size[3] == 1
@@ -43,15 +41,17 @@ close(io)
 
 p = Position()
 move!(p, black, 5, 5)
-io = open("print-group-0.txt", "w")
-print(io, p)
-close(io)
+#io = open("print-group-0.txt", "w")
+#print(io, p)
+#close(io)
+@test sprint(print, p) == open(readall, "print-group-0.txt", "r")
 # note (4,6) is shifted so get group join at print-group-4.txt
 for (i, (x,y)) in enumerate(((4,4),(4,5),(5,6),(4,6),(6,6),(6,5),(6,4),(5,4)))
     move!(p, white, x, y)
-    io = open("print-group-$i.txt", "w")
-    print(io, p)
-    close(io)
+#    io = open("print-group-$i.txt", "w")
+#    print(io, p)
+#    close(io)
+    @test sprint(print, p) == open(readall, "print-group-$i.txt", "r")
 end
 
 #srand(1)
