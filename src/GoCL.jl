@@ -333,6 +333,8 @@ function flood_to_point!(f::Flood, b::Board, t::Point, x, y)
     end
 end
 
+"""re-calculate (from scratch) the number of spaces associated with
+each group."""
 function calculate_space!(g::Groups)
     for k in 1:19
         g.space[k] = 0
@@ -396,7 +398,6 @@ end
 
 
 # todo
-# number of spaces on a group - difficult to cache.  better to calculate.
 # size of spaces?  maybe not important - kindof available in flood fill.
 # good scoring (at least for end of game assessment, maybe then fold stuff into
 # pre-processing layer.
