@@ -58,8 +58,10 @@ for i in 1:10
     move!(p, black, 11-i, 20-i)
 end
 println(p)
-s = map_space(p)
-println(fix(s))
+#io = open("print-space.txt", "w")
+#print(io, p)
+#close(io)
+@test sprint(print, p) == open(readall, "print-space.txt", "r")
 
 #srand(1)
 #p = Position()
