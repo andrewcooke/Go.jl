@@ -12,9 +12,10 @@ import Base: ==, print
 
 
 # todo
-# size of spaces?  maybe not important - kindof available in flood fill.
-# good scoring (at least for end of game assessment, maybe then fold stuff into
-# pre-processing layer.
+# scoring including prisoners
+# cached hash for Position
+# move code into sub-file
+# start on net / pre-processing
 # graphs, evolution, tournaments etc
 
 
@@ -286,7 +287,7 @@ function k_lowest_unused(k, a::Array{UInt8, 2}, n)
 end
 
 """merge the group at (x,y) with newgroup."""
-function merge_group{N}(g::Groups{N}, newgroup, x, y)
+function merge_group!{N}(g::Groups{N}, newgroup, x, y)
     oldgroup = g.index[x, y]
     if newgroup != oldgroup
         g.size[newgroup], g.size[oldgroup] = g.size[newgroup] + g.size[oldgroup], 0
@@ -561,7 +562,7 @@ function move!{N}(p::Position{N}, t::Point, x, y)
     @forneighbours x y N xx yy begin
         tt = point(p.board, xx, yy)
         if tt == t
-            merge_group(p.groups, newgroup, xx, yy)
+            merge_group!(p.groups, newgroup, xx, yy)
         elseif tt == other(t)
             check_and_delete_group!(p, xx, yy)
         end
@@ -605,14 +606,6 @@ function blank!{N}(data, p::Position{N})
         end
     end
 end
-
-
-# --- scoring
-
-
-# grow boundaries inwards
-# expand conflicting values outwards
-# reduce to find score
 
 
 end
