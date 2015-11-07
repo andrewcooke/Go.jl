@@ -2,18 +2,18 @@
 using GoCL
 using Base.Test
 
-a = ones(UInt32, 19, 19)
-b = zeros(UInt32, 19, 19)
-@forall i j begin
-    b[i, j] = 2 * a[i, j]
-end
-@test b == 2a
-c = @forall_fold i j (+) 0 b begin
-    b[i, j] = 3 * a[i, j]
-end
-@test c == 3 * 19 * 19
+#a = ones(UInt32, 19, 19)
+#b = zeros(UInt32, 19, 19)
+#@forall i j begin
+#    b[i, j] = 2 * a[i, j]
+#end
+#@test b == 2a
+#c = @forall_fold i j 19 (+) 0 b begin
+#    b[i, j] = 3 * a[i, j]
+#end
+#@test c == 3 * 19 * 19
 
-b = Board()
+b = Board{19}()
 @test length(b.row) == 19
 @test point(b, 1, 1) == empty
 @test point(b, 19, 19) == empty
@@ -25,7 +25,7 @@ move!(b, white, 12, 11)
 #close(io)
 @test sprint(print, b) == open(readall, "print-board.txt", "r")
 
-p = Position()
+p = Position{19}()
 move!(p, black, 5, 5)
 for (x,y) in ((5,6),(6,6),(6,5),(5,4),(4,5))
     move!(p, white, x, y)
@@ -39,7 +39,7 @@ end
 @test p.groups.size[3] == 1
 @test p.groups.size[4] == 1
 
-p = Position()
+p = Position{19}()
 move!(p, black, 5, 5)
 #io = open("print-group-0.txt", "w")
 #print(io, p)
