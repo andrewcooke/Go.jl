@@ -1,9 +1,8 @@
 
 module GoCL
 
-export fix, @forall, @forall_fold,
-       Point, black, empty, white, other,
-       Board, point, Groups, Flood, Space,
+export fix,
+       black, empty, white, other, point,
        Position, IllegalMove,
        move!
 

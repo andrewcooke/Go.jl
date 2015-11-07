@@ -13,7 +13,7 @@ using Base.Test
 #end
 #@test c == 3 * 19 * 19
 
-b = Board{19}()
+b = GoCL.Board{19}()
 @test length(b.row) == 19
 @test point(b, 1, 1) == empty
 @test point(b, 19, 19) == empty
