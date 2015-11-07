@@ -3,9 +3,9 @@ module GoCL
 
 export fix, @forall, @forall_fold,
        Point, black, empty, white, other,
-       Board, point, move, move!,
-       Position,
-       map_space, fix_space!, convolve, blank!
+       Board, point,
+       Position, IllegalMove,
+       move!
 
 using AutoHashEquals
 import Base: ==, print
@@ -138,6 +138,8 @@ Groups and Flood."""
     Position(p::Position) =
         new(Board{N}(p.board), Groups{N}(p.groups), Flood{N}(p.flood), Space{N}(p.space))
 end
+
+Position() = Position{19}()
 
 
 # --- points
@@ -290,8 +292,9 @@ function merge_group{N}(g::Groups{N}, newgroup, x, y)
 end
 
 """check whether the group at (x, y) is dead.  if so, remove it from
-Groups.index and set Flood.distance to zero (these are later replaced
-in flood_dead_group!)."""
+Groups.index, sets Flood.distance to zero (these are later replaced in
+flood_dead_group!) and Space.index to the next available value
+(patched up in fix_space!)."""
 function check_and_delete_group!{N}(p::Position{N}, x, y)
     alive = zeros(Bool, N, N)
     # the group we want to check
@@ -379,13 +382,18 @@ end
 """re-calculate (from scratch) the number of lives associated with
 each group."""
 function calculate_lives!{N}(g::Groups{N})
-    for k in 1:N
+    # the general idea here is that for each space, we see whether it
+    # contributes a life to any group (by lookng at neighbouting
+    # groups).  then we add those lives up.  this avoids "double
+    # counting" spaces that touch more than one stone.
+    for k in 1:255
         g.lives[k] = 0
     end
     # local vars
-    temp = zeros(UInt8, N, N, 4)
-    n = zeros(UInt8, N, N)
+    temp = zeros(UInt8, N, N, 4)   # neighbouring groups
+    n = zeros(UInt8, N, N)         # number of neighbouring groups (<=4)
     @forall i j N begin
+        # for spaces
         if g.index[i, j] == 0
             @forneighbours i j N ii jj begin
                 group = g.index[ii, jj]
@@ -403,6 +411,9 @@ function calculate_lives!{N}(g::Groups{N})
     end
 end
 
+"""the Space.border array uses this mask to indicate the border
+colour(s).  it is chosen so that updating adjacent values using or
+works ok, but needs translating at the net level."""
 function border_mask(t::Point)
     if t == empty
         return 0
@@ -437,8 +448,8 @@ function fix_space!{N}(s::Space{N}, b::Board{N})
                 end
                 my_k[i, j] = my_k[i, j] + 1
             end
+            s.border[i, j] = my_border[i, j]
         end
-        s.border[i, j] = my_border[i, j]
     end
     
     # second round - update until consistent
@@ -476,6 +487,8 @@ function fix_space!{N}(s::Space{N}, b::Board{N})
 
 end
 
+"""add space indices around a new move.  these are then resolved by
+fix_space!()."""
 function index_new_space!{N}(s::Space{N}, b::Board{N}, x, y)
     available = k_lowest_unused(4, s.index, N)
     k = 1
@@ -484,6 +497,20 @@ function index_new_space!{N}(s::Space{N}, b::Board{N}, x, y)
             s.index[xx, yy] = available[k]
             k = k+1
         end
+    end
+end
+
+type IllegalMove <: Exception end
+
+function assert_empty(p, x, y)
+    if point(p, x, y) != empty
+        throw(IllegalMove())
+    end
+end
+
+function assert_alive(p, x, y)
+    if p.groups.lives[p.groups.index[x, y]] == 0
+        throw(IllegalMove())
     end
 end
 
@@ -515,6 +542,7 @@ end
 """update the position, given a new point.  this includes all
 processing."""
 function move!{N}(p::Position{N}, t::Point, x, y)
+    assert_empty(p, x, y)
     move!(p.board, t, x, y)
     move!(p.flood, t, x, y)
     move!(p.space, x, y)
@@ -534,6 +562,8 @@ function move!{N}(p::Position{N}, t::Point, x, y)
     flood_dead_group!(p.flood, p.board, t)
     calculate_lives!(p.groups)
     fix_space!(p.space, p.board)
+    assert_alive(p, x, y)
+    p   # support call with new instance
 end
 
 

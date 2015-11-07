@@ -25,7 +25,7 @@ move!(b, white, 12, 11)
 #close(io)
 @test sprint(print, b) == open(readall, "print-board.txt", "r")
 
-p = Position{19}()
+p = Position()
 move!(p, black, 5, 5)
 for (x,y) in ((5,6),(6,6),(6,5),(5,4),(4,5))
     move!(p, white, x, y)
@@ -39,7 +39,7 @@ end
 @test p.groups.size[3] == 1
 @test p.groups.size[4] == 1
 
-p = Position{19}()
+p = Position()
 move!(p, black, 5, 5)
 #io = open("print-group-0.txt", "w")
 #print(io, p)
@@ -57,32 +57,30 @@ end
 for i in 1:10
     move!(p, black, 11-i, 20-i)
 end
-println(p)
 #io = open("print-space.txt", "w")
 #print(io, p)
 #close(io)
 @test sprint(print, p) == open(readall, "print-space.txt", "r")
 
-#srand(1)
-#p = Position()
-#for i in 1:60
-#    for t in (black, white)
-#        x, y = 0, 0
-#        while true
-#            x, y = rand(1:19), rand(1:19)
-#            if point(p, x, y) == empty
-#                break
-#            end
-#        end
-#        move!(p, t, x, y)
-#    end
-#end
-#io = open("random-position.txt", "w")
-#print(io, p)
-#close(io)
-#out = zeros(Int8, 19, 19)
-#div = Int8[0 -1 0; -1 4 -1; 0 -1 0]
-#println(div)
-#convolve(p.flood.distance, 1, div, out)
-#blank!(out, p)
-#println(fix(out))
+srand(1)
+p = Position{9}()
+for i in 1:50
+    for t in (black, white)
+        ok = false
+        while !ok
+            try
+                p = move!(Position(p), t, rand(1:9), rand(1:9))
+                ok = true
+            catch e
+                if !isa(e, IllegalMove)
+                    rethrow()
+                end
+            end
+        end
+        println("\n\n")
+        println(p)
+    end
+end
+io = open("random-position.txt", "w")
+print(io, p)
+close(io)
