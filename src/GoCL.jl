@@ -134,6 +134,20 @@ end
 Space{N}(g::Space{N}) = Space{N}(g)
 
 
+@auto_hash_equals type Details
+    spaces::Int
+    prisoners::Int
+    Details() = new(0, 0)
+    Deatils(d::Details) = new(d.spaces, d.prisoners)
+end
+
+@auto_hash_equals type Score
+    total::Int
+    colour::Dict{Point, Details}
+    Score() = new(0, Dict{Point, Details}(black=>Details(), white=>Details()))
+    Score(s::Score) = new(s.total, [x=>s.colour[x] for x in (black, white)])
+end
+
 """a single position (implicitly, in a search tree).  combines Board,
 Groups, Flood and Space."""
 @auto_hash_equals immutable Position{N}
@@ -141,9 +155,10 @@ Groups, Flood and Space."""
     groups::Groups{N}
     flood::Flood{N}
     space::Space{N}
-    Position() = new(Board{N}(), Groups{N}(), Flood{N}(), Space{N}())
+    score::Score
+    Position() = new(Board{N}(), Groups{N}(), Flood{N}(), Space{N}(), Score())
     Position(p::Position) =
-        new(Board(p.board), Groups(p.groups), Flood(p.flood), Space(p.space))
+        new(Board(p.board), Groups(p.groups), Flood(p.flood), Space(p.space), Score(p.score))
 end
 Position{N}(g::Position{N}) = Position{N}(g)
 Position() = Position{19}()
@@ -241,23 +256,29 @@ function print(io::IO, s::Space)
     print(io, join(fmtindex(s), "\n"))
 end
 
+print(io::IO, s::Score) = 
+@printf(io, " %2d  [black  pr=%-2d sp=%-3d] [white  pr=%-2d sp=%-3d]", 
+        s.total, 
+        s.colour[black].prisoners, s.colour[black].spaces,
+        s.colour[white].prisoners, s.colour[white].spaces)
+
 function print(io::IO, p::Position)
     print(io, 
           join(map(x -> join(x, "  "), 
                    zip(fmtpoint(p.board), 
                        fmtindex(p.groups))), "\n"))
-    print(io, "\n")
-    print(io, "\n")
+    print(io, "\n\n")
     print(io,
           join(map(x -> join(x, "  "), 
                    zip(fmtdistance(p.flood), 
                        fmtstats(p.groups))), "\n"))
-    print(io, "\n")
-    print(io, "\n")
+    print(io, "\n\n")
     print(io,
           join(map(x -> join(x, "  "), 
                    zip(fmtborder(p.space), 
                        fmtindex(p.space))), "\n"))
+    print(io, "\n\n")
+    print(io, p.score)
 end
 
 
@@ -302,7 +323,7 @@ end
 Groups.index, sets Flood.distance to zero (these are later replaced in
 flood_dead_group!) and Space.index to the next available value
 (patched up in fix_space!)."""
-function check_and_delete_group!{N}(p::Position{N}, x, y)
+function check_and_delete_group!{N}(p::Position{N}, t, x, y)
     alive = zeros(Bool, N, N)
     # the group we want to check
     group = p.groups.index[x, y]
@@ -318,12 +339,12 @@ function check_and_delete_group!{N}(p::Position{N}, x, y)
     end
         # if not alive
         space = k_lowest_unused(1, p.space.index, N)[1]
+        p.score.colour[t].prisoners = p.score.colour[t].prisoners + p.groups.size[group]
         p.groups.size[group] = 0
         @forall i j N begin
             if p.groups.index[i, j] == group
                 # remove stone
                 move!(p.board, empty, i, j)
-                # TOOO - increment prisoner count
                 # erase group index
                 p.groups.index[i, j] = 0
                 p.space.index[i, j] = space
@@ -507,6 +528,21 @@ function index_new_space!{N}(s::Space{N}, b::Board{N}, x, y)
     end
 end
 
+function score!(x::Score, s::Space)
+    function f(x, b)
+        if b == 1
+            x.colour[black].spaces = x.colour[black].spaces + 1
+        elseif b == 2
+            x.colour[white].spaces = x.colour[white].spaces + 1
+        end
+        x
+    end
+    x.colour[black].spaces, x.colour[white].spaces = 0, 0
+    foldl(f, x, s.border)
+    b, w = x.colour[black], x.colour[white]
+    x.total = b.prisoners + b.spaces - (w.prisoners + w.spaces)
+end
+
 type IllegalMove <: Exception end
 
 function assert_empty(p, x, y)
@@ -563,13 +599,14 @@ function move!{N}(p::Position{N}, t::Point, x, y)
         if tt == t
             merge_group!(p.groups, newgroup, xx, yy)
         elseif tt == other(t)
-            check_and_delete_group!(p, xx, yy)
+            check_and_delete_group!(p, t, xx, yy)
         end
     end
     flood_dead_group!(p.flood, p.board, t)
     calculate_lives!(p.groups)
     fix_space!(p.space, p.board)
     assert_alive(p, x, y)
+    score!(p.score, p.space)
     p   # support call with new instance
 end
 

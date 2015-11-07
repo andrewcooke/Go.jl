@@ -2,6 +2,8 @@
 using GoCL
 using Base.Test
 
+regen = false
+
 #a = ones(UInt32, 19, 19)
 #b = zeros(UInt32, 19, 19)
 #@forall i j begin
@@ -20,9 +22,11 @@ b = GoCL.Board{19}()
 move!(b, black, 10, 10)
 @test point(b, 10, 10) == black
 move!(b, white, 12, 11)
-#io = open("print-board.txt", "w")
-#print(io, b)
-#close(io)
+if regen
+    open("print-board.txt", "w") do io
+        print(io, b)
+    end
+end
 @test sprint(print, b) == open(readall, "print-board.txt", "r")
 
 p = Position()
@@ -30,9 +34,11 @@ move!(p, black, 5, 5)
 for (x,y) in ((5,6),(6,6),(6,5),(5,4),(4,5))
     move!(p, white, x, y)
 end
-#io = open("print-position.txt", "w")
-#print(io, p)
-#close(io)
+if regen
+    open("print-position.txt", "w") do io
+        print(io, p)
+    end
+end
 @test sprint(print, p) == open(readall, "print-position.txt", "r")
 @test p.groups.size[1] == 0
 @test p.groups.size[2] == 3
@@ -41,25 +47,31 @@ end
 
 p = Position()
 move!(p, black, 5, 5)
-#io = open("print-group-0.txt", "w")
-#print(io, p)
-#close(io)
+if regen
+    open("print-group-0.txt", "w") do io
+        print(io, p)
+    end
+end
 @test sprint(print, p) == open(readall, "print-group-0.txt", "r")
 # note (4,6) is shifted so get group join at print-group-4.txt
 for (i, (x,y)) in enumerate(((4,4),(4,5),(5,6),(4,6),(6,6),(6,5),(6,4),(5,4)))
     move!(p, white, x, y)
-#    io = open("print-group-$i.txt", "w")
-#    print(io, p)
-#    close(io)
-    @test sprint(print, p) == open(readall, "print-group-$i.txt", "r")
+    if regen
+        open("print-group-$i.txt", "w") do io
+            print(io, p)
+        end
+        @test sprint(print, p) == open(readall, "print-group-$i.txt", "r")
+    end
 end
 
 for i in 1:10
     move!(p, black, 11-i, 20-i)
 end
-#io = open("print-space.txt", "w")
-#print(io, p)
-#close(io)
+if regen
+    open("print-space.txt", "w") do io
+        print(io, p)
+    end
+end
 @test sprint(print, p) == open(readall, "print-space.txt", "r")
 
 srand(1)
@@ -77,11 +89,15 @@ for i in 1:50
                 end
             end
         end
-#        println("\n\n")
-#        println(p)
+        if regen
+            println("\n\n")
+            println(p)
+        end
     end
 end
-#io = open("random-position.txt", "w")
-#print(io, p)
-#close(io)
+if regen
+    open("random-position.txt", "w") do io
+        print(io, p)
+    end
+end
 @test sprint(print, p) == open(readall, "random-position.txt", "r")
