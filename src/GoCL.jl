@@ -3,7 +3,7 @@ module GoCL
 
 export fix, @forall, @forall_fold,
        Point, black, empty, white, other,
-       Board, point,
+       Board, point, Groups, Flood, Space,
        Position, IllegalMove,
        move!
 
@@ -89,6 +89,8 @@ emptyrow(n) = Row(sum([3^(n-1) for n in 1:n]))
     Board() = new(fill(emptyrow(N), N))
     Board(b::Board) = new(copy(b.row))
 end
+# https://groups.google.com/forum/#!topic/julia-users/-n3xsEHxwAI
+Board{N}(b::Board{N}) = Board{N}(b)
 
 
 """identify points common to a group and provide basic stats."""
@@ -100,6 +102,7 @@ end
     Groups() = new(zeros(UInt8, N, N), zeros(UInt8, 255), zeros(UInt8, 255))
     Groups(g::Groups{N}) = new(copy(g.index), copy(g.size), copy(g.lives))
 end
+Groups{N}(g::Groups{N}) = Groups{N}(g)
 
 
 """a map of cartesian signed distances to the nearest non-empty point,
@@ -119,6 +122,8 @@ net."""
     Flood() = new(zeros(Int8, N, N))
     Flood(f::Flood{N}) = new(copy(f.distance))
 end
+Flood{N}(g::Flood{N}) = Flood{N}(g)
+
 
 @auto_hash_equals immutable Space{N}
     border::Array{Int8, 2}
@@ -126,9 +131,11 @@ end
     Space() = new(zeros(Int8, N, N), zeros(UInt8, N, N))
     Space(s::Space{N}) = new(copy(s.border), copy(s.index))
 end
+Space{N}(g::Space{N}) = Space{N}(g)
+
 
 """a single position (implicitly, in a search tree).  combines Board,
-Groups and Flood."""
+Groups, Flood and Space."""
 @auto_hash_equals immutable Position{N}
     board::Board{N}
     groups::Groups{N}
@@ -136,9 +143,9 @@ Groups and Flood."""
     space::Space{N}
     Position() = new(Board{N}(), Groups{N}(), Flood{N}(), Space{N}())
     Position(p::Position) =
-        new(Board{N}(p.board), Groups{N}(p.groups), Flood{N}(p.flood), Space{N}(p.space))
+        new(Board(p.board), Groups(p.groups), Flood(p.flood), Space(p.space))
 end
-
+Position{N}(g::Position{N}) = Position{N}(g)
 Position() = Position{19}()
 
 
@@ -176,7 +183,7 @@ function fmtindex(index::Array{UInt8, 2}, y, n)
     m = markers(n)
     function fmt(x)
         if index[x, y] > 0
-            @sprintf("%02X", index[x, y])
+            @sprintf("%02x", index[x, y])
         elseif y in m && x in m
             "__"
         else
@@ -299,11 +306,11 @@ function check_and_delete_group!{N}(p::Position{N}, x, y)
     alive = zeros(Bool, N, N)
     # the group we want to check
     group = p.groups.index[x, y]
-    if ! @forall_fold i j N (x,y) -> any([x,y]) false alive begin 
+    if ! @forall_fold i j N (a,b) -> (a|b) false alive begin 
         if p.groups.index[i, j] == group
-            @forneighbours x y N xx yy begin
+            @forneighbours i j N ii jj begin
                 # if a neighbour is empty, return that via the fold
-                if point(p.board, xx, yy) == empty
+                if point(p.board, ii, jj) == empty
                     alive[i, j] = true
                 end
             end

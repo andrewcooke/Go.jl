@@ -77,10 +77,11 @@ for i in 1:50
                 end
             end
         end
-        println("\n\n")
-        println(p)
+#        println("\n\n")
+#        println(p)
     end
 end
-io = open("random-position.txt", "w")
-print(io, p)
-close(io)
+#io = open("random-position.txt", "w")
+#print(io, p)
+#close(io)
+@test sprint(print, p) == open(readall, "random-position.txt", "r")
