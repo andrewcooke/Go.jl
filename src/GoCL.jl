@@ -1,10 +1,7 @@
 
 module GoCL
 
-export fix,
-       black, empty, white, other, point,
-       Position, IllegalMove,
-       move!
+export fix, black, empty, white, other, point, Position, IllegalMove, move!
 
 using AutoHashEquals
 
@@ -15,7 +12,7 @@ using AutoHashEquals
 
 
 include("position.jl")
-
+include("expression.jl")
 
 
 end
