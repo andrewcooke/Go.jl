@@ -7,7 +7,6 @@ export fix,
        move!
 
 using AutoHashEquals
-import Base: ==, print
 
 
 # todo

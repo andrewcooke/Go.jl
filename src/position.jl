@@ -184,7 +184,7 @@ function fmtpoint(r::Row, y, n)
 end
 fmtpoint{N}(b::Board{N}) = map(y -> fmtpoint(b.row[y], y, N), N:-1:1)
 
-print(io::IO, b::Board) = print(io, join(fmtpoint(b), "\n"))
+Base.print(io::IO, b::Board) = print(io, join(fmtpoint(b), "\n"))
 
 function fmtindex(index::Array{UInt8, 2}, y, n)
     m = markers(n)
@@ -211,7 +211,7 @@ function fmtstats(g::Groups, row)
 end
 fmtstats{N}(g::Groups{N}) = map(r -> fmtstats(g, r), 1:N)
 
-function print(io::IO, g::Groups)
+function Base.print(io::IO, g::Groups)
     print(io, join(fmtindex(g), "\n"))
     print(io, "\n")
     print(io, join(fmtstats(g), "\n"))
@@ -232,7 +232,7 @@ function fmtdistance{N}(f::Flood{N}, y)
 end
 fmtdistance{N}(f::Flood{N}) = map(y -> fmtdistance(f, y), N:-1:1)
 
-print(io::IO, f::Flood) = print(io, join(fmtdistance(f), "\n"))
+Base.print(io::IO, f::Flood) = print(io, join(fmtdistance(f), "\n"))
 
 fmtindex{N}(s::Space{N}) = map(y -> fmtindex(s.index, y, N), N:-1:1)
 
@@ -242,19 +242,19 @@ function fmtborder{N}(s::Space{N}, y)
 end
 fmtborder{N}(s::Space{N}) = map(y -> fmtborder(s, y), N:-1:1)
 
-function print(io::IO, s::Space)
+function Base.print(io::IO, s::Space)
     print(io, join(fmtborder(s), "\n"))
     print(io, "\n")
     print(io, join(fmtindex(s), "\n"))
 end
 
-print(io::IO, s::Score) = 
+Base.print(io::IO, s::Score) = 
 @printf(io, " %2d  [black  pr=%-2d sp=%-3d] [white  pr=%-2d sp=%-3d]", 
         s.total, 
         s.colour[black].prisoners, s.colour[black].spaces,
         s.colour[white].prisoners, s.colour[white].spaces)
 
-function print(io::IO, p::Position)
+function Base.print(io::IO, p::Position)
     print(io, 
           join(map(x -> join(x, "  "), 
                    zip(fmtpoint(p.board), 
