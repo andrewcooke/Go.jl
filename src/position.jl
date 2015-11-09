@@ -135,6 +135,8 @@ end
 
 @auto_hash_equals type Score
     total::Int
+    owned::Float32
+    stones::Float32
     colour::Dict{Point, Details}
     Score() = new(0, Dict{Point, Details}(black=>Details(), white=>Details()))
     Score(s::Score) = new(s.total, [x=>s.colour[x] for x in (black, white)])
@@ -520,7 +522,7 @@ function index_new_space!{N}(s::Space{N}, b::Board{N}, x, y)
     end
 end
 
-function score!(x::Score, s::Space)
+function score!{N}(x::Score, s::Space{N})
     function f(x, b)
         if b == 1
             x.colour[black].spaces = x.colour[black].spaces + 1
@@ -533,6 +535,9 @@ function score!(x::Score, s::Space)
     foldl(f, x, s.border)
     b, w = x.colour[black], x.colour[white]
     x.total = b.prisoners + b.spaces - (w.prisoners + w.spaces)
+    # two measures of progress
+    x.owned = Float32(count(x -> 0 < x < 3, s.border) / N^2)
+    x.stones = Float32(count(x -> x == 0, s.border) / N^2)
 end
 
 type IllegalMove <: Exception end
