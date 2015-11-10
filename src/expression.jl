@@ -94,22 +94,31 @@ end
 function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, inp, edge, p::Position{N})
     if 1 <= x <= N && 1 <= y <= N
         if inp > given
-            b2f(d[x, y, inp])
+            # yay, simple lookup
+            b2f(d[x, y, inp-given])
         elseif inp == 1
+            # constant 0
             zero(Float32)
         elseif inp == 2
+            # constant 1
             one(Float32)
         elseif inp == 3
+            # 1 for black, 0 for empty, -1 for white
             Float32(point(p, x, y))
         elseif inp == 4
+            # 1 if same group as 'centre', -1 if not
             Float32(p.groups.index[x, y] == p.groups.index[ox, oy] ? 1 : -1)
         elseif inp == 5
+            # size of group at that point
             Float32(p.groups.size[x, y])
         elseif inp == 6
+            # number of lives in group at that point
             Float32(p.groups.lives[x, y])
         elseif inp == 7
+            # distance to nearest stone (-ve for white)
             Float32(p.flood.distance[x, y])
         elseif inp == 8
+            # 1 if owned by black, -1 owned by white, 0 otherwise
             b = p.space.border[x, y]
             if b == 0 || b == 3
                 0
@@ -119,12 +128,16 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, inp, edge, p::Position{N})
                 -1
             end
         elseif inp == 9
+            # 1 if same space as 'centre', -1 if not            
             Float32(p.space.index[x, y] == p.space.index[ox, oy] ? 1 : -1)
         elseif inp == 10
+            # constant score (+ve for black)
             Float32(p.score.total)
         elseif inp == 11
+            # fraction of space that is 'owned'
             p.score.owned
         elseif inp == 12
+            # fraction of board that is stones
             p.score.stones
         end
     else
@@ -136,6 +149,7 @@ function evaluate_kernel{N}(e::StatefulIterator, p::Position{N}, d::Array{Int8, 
     nx, ny = unpack_kernel_size(read(e))
     edge = b2f(read(e, Int8))
     cy, cx = [divrem(read(e) % (nx * ny), nx)...] + [1,1]
+    # todo - wasn't sign important here?
     inp = 1 + (read(e) % (available + given))
     kernel = reshape([b2f(read(e)) for i in nx * ny], nx, ny)
     out = available + 1

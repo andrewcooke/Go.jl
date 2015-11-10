@@ -536,8 +536,8 @@ function score!{N}(x::Score, s::Space{N})
     b, w = x.colour[black], x.colour[white]
     x.total = b.prisoners + b.spaces - (w.prisoners + w.spaces)
     # two measures of progress
-    x.owned = Float32(count(x -> 0 < x < 3, s.border) / N^2)
-    x.stones = Float32(count(x -> x == 0, s.border) / N^2)
+    x.stones = count(x -> x == 0, s.border)
+    x.owned = Float32(count(x -> 0 < x < 3, s.border) / (N^2 - x.stones))
 end
 
 type IllegalMove <: Exception end
