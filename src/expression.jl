@@ -121,11 +121,11 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, inp, edge, p::Position{N})
             # 1 if owned by black, -1 owned by white, 0 otherwise
             b = p.space.border[x, y]
             if b == 0 || b == 3
-                0
+                zero(Float32)
             elseif b == 1
-                1
+                one(Float32)
             else
-                -1
+                -one(Float32)
             end
         elseif inp == 9
             # 1 if same space as 'centre', -1 if not            
