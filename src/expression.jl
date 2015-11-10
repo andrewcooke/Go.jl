@@ -48,7 +48,7 @@
 #     byte 3: index into input
 #     remaining bytes as kernel
 #   1: sum
-#     byte 0: (mod 8) number of inputs
+#     byte 0: (mod 8 + 1) number of inputs
 #     remaining bytes as pairs:
 #       byte 0: index into input
 #       byte 1: scale (see below for byte -> float)
@@ -80,7 +80,7 @@ function count_operations(e)
                 n = product(unpack_kernel_size(read(e)))
                 read(e, n+3)  # drop edge + locn + index + kernel
             else
-                n = read(e) % 8
+                n = 1 + read(e) % 8
                 read(e, n*2)
             end
             count += 1
