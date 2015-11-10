@@ -40,31 +40,37 @@
 #         (any final operation that is incomplete because of the length
 #         is simply discarded)
 # operations: repeated until end (discarding any incomplete at end)
-#   first byte of operation mod 3 gives type:
+#   bit 7 of first byte gives type and size
 #   0: kernel
-#     byte 0: size in x and y (packed into nibbles)
+#     byte 0: 
+#       bit 7: 0
+#       bit 0-6: size in x and y (see code)
 #     byte 1: byte used for input outside board edges
 #     byte 2: (mod size of grid) location of output within the kernel 
 #     byte 3: index into input
-#     remaining bytes as kernel
-#   1: sum
-#     byte 0: (mod 8 + 1) number of inputs
-#     remaining bytes as pairs:
+#     remaining bytes as kernel (see below for byte -> float)
+#   1: polynomial
+#     byte 0:
+#       bit 7: 1
+#       bit 6-4: unused
+#       bit 0-3: (+1) number of inputs
+#     remaining bytes as triplets:
 #       byte 0: index into input
 #       byte 1: scale (see below for byte -> float)
-#   2: product
-#     as sum (above), but power instead of scale (different byte -> float)
+#       byte 2: (mod 9 - 4) power
+#     polynomials are evaluated as:
+#       positive power: scale*(input/10)**power
+#       negative power: scale*(3*input)**power (clipped 1/0 -> 127 as byte)
+#       zero power: scale
 # indexing into input is
 #   positive (mod available): direct index into input
-#   negative (mod available): indiect index into input
-# general encoding from byte -> float is
-#   float(b) = signed(b) / sqrt(128) with clipping at limits
-#   but for powers used signed(b) / 32 (ie roughly +/-4)
+#   negative (mod available): indirect index into input (relative to "here")
+# general encoding from byte <-> float is
+#   float(b) = signed(b) / sqrt(128) with hard clipping
 
 
-@enum OpTag kernel=0x00 sum=0x01 product=0x02
 
-unpack_kernel_size(n::UInt8) = (n & 0xf0) >> 4, n & 0xof
+unpack_kernel_size(n::UInt8) = (n & 0x70) >> 4, n & 0x0f
 
 b2f(x::Int8) = Float32(coerce(Int8, x) / sqrt(128))
 f2b(x::Float32) = Int8(max(127, min(-128, round(x * sqrt(128)))))
@@ -75,19 +81,19 @@ function count_operations(e)
     count = 0
     try
         while true
-            tag = read(e) % 3
-            if tag == kernel
-                n = product(unpack_kernel_size(read(e)))
+            tag = read(e)
+            if tag & 0x80 ==  n = product(unpack_kernel_size(tag))
                 read(e, n+3)  # drop edge + locn + index + kernel
             else
-                n = 1 + read(e) % 8
-                read(e, n*2)
+                n = tag & 0x07
+                read(e, n*3)
             end
             count += 1
         end
     catch x
         # ignore end of data
         println(x)  # check and rethrow
+        rethrow()
     end        
 end
 
@@ -145,34 +151,65 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, inp, edge, p::Position{N})
     end
 end
 
-function evaluate_kernel{N}(e::StatefulIterator, p::Position{N}, d::Array{Int8, 3}, available)
-    nx, ny = unpack_kernel_size(read(e))
+function read_input(e::StatefulIterator, available)
+    inp = read(e, Int8)
+    n = given + available
+    if inp < 0
+        n - ((-inp) % n)
+    else
+        1 + (inp % n)
+    end
+end
+
+function evaluate_kernel{N}(tag::UInt8, e::StatefulIterator, p::Position{N}, d::Array{Int8, 3}, available)
+    nx, ny = unpack_kernel_size(tag)
     edge = b2f(read(e, Int8))
     cy, cx = [divrem(read(e) % (nx * ny), nx)...] + [1,1]
-    # todo - wasn't sign important here?
-    inp = 1 + (read(e) % (available + given))
-    kernel = reshape([b2f(read(e)) for i in nx * ny], nx, ny)
-    out = available + 1
+    input = read_input(e, available)
+    kernel = reshape([b2f(read(e, Int8)) for i in nx * ny], nx, ny)
+    my_acc = zeros(Float32, N, N)
     @forall i j N begin
         for di in 1:nx
             for dj in 1:ny
                 # the best way to understand this is to draw a picture.
                 # it's basically a coord change from one frame (kernel)
                 # to the other (data).
-                d[i,j,out] += lookup(i+di-cx, j+dj-cy, i, j, d, available, edge, p)
+                my_acc[i,j] += lookup(i+di-cx, j+dj-cy, i, j, d, input, edge, p)
             end
         end
+        d[i, j, available+1] = f2b(my_acc[i, j])
+    end
+end
+
+function evaluate_polynomial{N}(tag::UInt8, e::StatefulIterator, p::Position{N}, d::Array{Int8, 3}, available)
+    n = 1 + (tag & 0x07)
+    my_acc = zeros(Float32, N, N)
+    @forall i j N begin
+        for k = 1:n
+            input = read_input(e)
+            scale = b2f(read(e, Int8))
+            power = (read(e) % 9) - 4
+            if power == 0
+                my_acc[i, j] += scale
+            else
+                value = lookup(i, j, 0, 0, d, input, 0, p)
+                if power > 0
+                    my_acc[i, j] += scale * (input / 10)**power
+                else
+                    my_acc[i, j] += scale * (3 * input)**power
+                end
+            end
+        end
+        d[i, j, available+1] = f2b(my_acc[i, j])
     end
 end
 
 function evaluate(e::StatefulIterator, p::Position, d::Array{Int8, 3}, available)
-    tag = read(e) % 3
-    if tag == kernel
-        evaluate_kernel(e, p, d, available)
-    elseif tag == sum
-        evaluate_sum(e, p, d, available)
+    tag = read(e)
+    if tag &0x80 == 0
+        evaluate_kernel(tag, e, p, d, available)
     else
-        evaluate_product(e, p, d, available)
+        evaluate_polynomial(tag, e, p, d, available)
     end
 end
 
