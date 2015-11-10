@@ -59,8 +59,8 @@
 #       byte 1: scale (see below for byte -> float)
 #       byte 2: (mod 9 - 4) power
 #     polynomials are evaluated as:
-#       positive power: scale*(input/10)**power
-#       negative power: scale*(3*input)**power (clipped 1/0 -> 127 as byte)
+#       positive power: scale*(input/10)^power
+#       negative power: scale*(3*input)^power (clipped 1/0 -> 127 as byte)
 #       zero power: scale
 # indexing into input is
 #   positive (mod available): direct index into input
@@ -70,10 +70,11 @@
 
 
 
-unpack_kernel_size(n::UInt8) = (n & 0x70) >> 4, n & 0x0f
+unpack_kernel_size(n::UInt8) = ((n & 0x70) >> 4) + 1, (n & 0x0f) + 1
+unpack_polynomial_size(n::UInt8) = 1 + (n & 0x07)
 
-b2f(x::Int8) = Float32(coerce(Int8, x) / sqrt(128))
-f2b(x::Float32) = Int8(max(127, min(-128, round(x * sqrt(128)))))
+b2f(b::Int8) = Float32(reinterpret(Int8, b) / sqrt(128))
+f2b(f::Float32) = Int8(min(127, max(-128, round(f * sqrt(128)))))
 
 const given = 12  # indices that are constant or taken from position
 
@@ -82,48 +83,66 @@ function count_operations(e)
     try
         while true
             tag = read(e)
-            if tag & 0x80 ==  n = product(unpack_kernel_size(tag))
+            if tag & 0x80 == 0
+                n = prod(unpack_kernel_size(tag))
                 read(e, n+3)  # drop edge + locn + index + kernel
             else
-                n = tag & 0x07
+                n = unpack_polynomial_size(tag)
                 read(e, n*3)
             end
             count += 1
         end
     catch x
         # ignore end of data
-        println(x)  # check and rethrow
-        rethrow()
-    end        
+        if ! isa(x, BoundsError)
+            rethrow()
+        end
+    end
+    count
 end
 
-function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, inp, edge, p::Position{N})
+function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N})
     if 1 <= x <= N && 1 <= y <= N
-        if inp > given
+        if input > given
             # yay, simple lookup
-            b2f(d[x, y, inp-given])
-        elseif inp == 1
+            b2f(d[x, y, input-given])
+        elseif input == 1
             # constant 0
             zero(Float32)
-        elseif inp == 2
+        elseif input == 2
             # constant 1
             one(Float32)
-        elseif inp == 3
+        elseif input == 3
             # 1 for black, 0 for empty, -1 for white
-            Float32(point(p, x, y))
-        elseif inp == 4
-            # 1 if same group as 'centre', -1 if not
-            Float32(p.groups.index[x, y] == p.groups.index[ox, oy] ? 1 : -1)
-        elseif inp == 5
+            Float32(Int(point(p, x, y)))
+        elseif input == 4
+            if ox != 0 && oy != 0
+                # kernel: 1 if same group as 'centre', -1 if not
+                Float32(p.groups.index[x, y] == p.groups.index[ox, oy] ? 1 : -1)
+            else
+                # polynomial: can't think of anything better here
+                Float32(p.groups.index[x, y])
+            end
+        elseif input == 5
             # size of group at that point
-            Float32(p.groups.size[x, y])
-        elseif inp == 6
+            i = p.groups.index[x, y]
+            if i > 0
+                Float32(p.groups.size[i])
+            else
+                edge
+            end
+        elseif input == 6
             # number of lives in group at that point
-            Float32(p.groups.lives[x, y])
-        elseif inp == 7
+            i = p.groups.index[x, y]
+            if i > 0
+                Float32(p.groups.lives[i])
+            else
+                edge
+            end
+        elseif input == 7
             # distance to nearest stone (-ve for white)
             Float32(p.flood.distance[x, y])
-        elseif inp == 8
+        elseif input == 8
             # 1 if owned by black, -1 owned by white, 0 otherwise
             b = p.space.border[x, y]
             if b == 0 || b == 3
@@ -133,16 +152,21 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, inp, edge, p::Position{N})
             else
                 -one(Float32)
             end
-        elseif inp == 9
-            # 1 if same space as 'centre', -1 if not            
-            Float32(p.space.index[x, y] == p.space.index[ox, oy] ? 1 : -1)
-        elseif inp == 10
+        elseif input == 9
+            if ox != 0 && oy != 0
+                # 1 if same space as 'centre', -1 if not            
+                Float32(p.space.index[x, y] == p.space.index[ox, oy] ? 1 : -1)
+            else
+                # polynomial: can't think of anything better here
+                Float32(p.space.index[x, y])
+            end
+        elseif input == 10
             # constant score (+ve for black)
             Float32(p.score.total)
-        elseif inp == 11
+        elseif input == 11
             # fraction of space that is 'owned'
             p.score.owned
-        elseif inp == 12
+        elseif input == 12
             # fraction of board that is stones
             p.score.stones
         end
@@ -152,12 +176,14 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, inp, edge, p::Position{N})
 end
 
 function read_input(e::StatefulIterator, available)
-    inp = read(e, Int8)
+    input = read(e, Int8)
     n = given + available
-    if inp < 0
-        n - ((-inp) % n)
+    # abs(-128) = -128 for Int8
+    index = abs(Int(input)) % n
+    if input < 0
+        n - index
     else
-        1 + (inp % n)
+        1 + index
     end
 end
 
@@ -166,7 +192,7 @@ function evaluate_kernel{N}(tag::UInt8, e::StatefulIterator, p::Position{N}, d::
     edge = b2f(read(e, Int8))
     cy, cx = [divrem(read(e) % (nx * ny), nx)...] + [1,1]
     input = read_input(e, available)
-    kernel = reshape([b2f(read(e, Int8)) for i in nx * ny], nx, ny)
+    kernel = reshape([b2f(read(e, Int8)) for i in 1:nx*ny], nx, ny)
     my_acc = zeros(Float32, N, N)
     @forall i j N begin
         for di in 1:nx
@@ -182,25 +208,27 @@ function evaluate_kernel{N}(tag::UInt8, e::StatefulIterator, p::Position{N}, d::
 end
 
 function evaluate_polynomial{N}(tag::UInt8, e::StatefulIterator, p::Position{N}, d::Array{Int8, 3}, available)
-    n = 1 + (tag & 0x07)
+    n = unpack_polynomial_size(tag)
     my_acc = zeros(Float32, N, N)
-    @forall i j N begin
-        for k = 1:n
-            input = read_input(e)
-            scale = b2f(read(e, Int8))
-            power = (read(e) % 9) - 4
+    for k in 1:n
+        input = read_input(e, available)
+        scale = b2f(read(e, Int8))
+        power = Int(read(e) % 9) - 4
+        @forall i j N begin
             if power == 0
                 my_acc[i, j] += scale
             else
-                value = lookup(i, j, 0, 0, d, input, 0, p)
+                value = lookup(i, j, 0, 0, d, input, 0.0, p)
                 if power > 0
-                    my_acc[i, j] += scale * (input / 10)**power
+                    my_acc[i, j] += scale * (value / 10)^power
                 else
-                    my_acc[i, j] += scale * (3 * input)**power
+                    my_acc[i, j] += scale * (3 * value)^power
                 end
             end
+            if k == n
+                d[i, j, available+1] = f2b(my_acc[i, j])
+            end
         end
-        d[i, j, available+1] = f2b(my_acc[i, j])
     end
 end
 
@@ -215,13 +243,23 @@ end
 
 function evaluate{N}(data::Array{UInt8, 1}, p::Position{N})
     e = StatefulIterator(data)
-    @assert read(e, 4) == map(UInt8, "goxp")   # header
-    @assert read(e) = 0x00                     # version
-    len = read(e, UInt16)                      # length
+    @assert read(e, 4) == map(UInt8, collect("goxp"))   # header
+    @assert read(e) == 0x00                             # version
+    @assert read(e, UInt16) == length(data)             # length
     n = count_operations(copy(e))
     output_data = zeros(Int8, N, N, n)
     for i in 1:n
         evaluate(e, p, output_data, i-1)
+#        println(fix(map(b2f, output_data[:,:,i])))
     end
     output_data[:,:,n]
+end
+
+function random_expression(n)
+    @assert n > 7
+    e = rand(UInt8, n)
+    e[1:4] = map(UInt8, collect("goxp"))
+    e[5] = 0x00
+    e[6:7] = reinterpret(UInt8, UInt16[n])
+    e
 end

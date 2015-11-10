@@ -21,43 +21,6 @@ fix{T}(x::Array{T, 2}) = x'[size(x)[1]:-1:1,:]
 
 
 
-# --- macros
-
-
-"""execute the same code at each point on the board (tries to
-guarantee that the julia code is structured similarly to an opencl
-kernel)."""
-macro forall(i, j, n, block)
-    :(for $(esc(i)) in 1:$(esc(n))
-          for $(esc(j)) in 1:$(esc(n))
-              $(esc(block))
-          end
-      end)
-end
-
-"""as forall, but also include a final reduction (again, easy to
-implement in a kernel)."""
-macro forall_fold(i, j, n, f, z, r, block)
-    :(for $(esc(i)) in 1:$(esc(n))
-          for $(esc(j)) in 1:$(esc(n))
-              $(esc(block))
-          end
-      end;
-      foldl($(esc(f)), $(esc(z)), $(esc(r))))
-end
-
-"""iterate over neigbours - explicit loop (not parallelized) (to
-reduce board lookup dx=0 should be grouped)."""
-macro forneighbours(x, y, n, xx, yy, block)
-    :(for (dx, dy) in ((0, 1), (0, -1), (1, 0), (-1, 0))
-          $(esc(xx)), $(esc(yy)) = $(esc(x)) + dx, $(esc(y)) + dy      
-          if $(esc(xx)) > 0 && $(esc(xx)) <= $(esc(n)) && $(esc(yy)) > 0 && $(esc(yy)) <= $(esc(n))
-              $(esc(block))
-          end
-      end)
-end
-
-
 # --- data structures
 
 
@@ -138,8 +101,8 @@ end
     owned::Float32
     stones::Float32
     colour::Dict{Point, Details}
-    Score() = new(0, Dict{Point, Details}(black=>Details(), white=>Details()))
-    Score(s::Score) = new(s.total, [x=>s.colour[x] for x in (black, white)])
+    Score() = new(0, 0, 0, Dict{Point, Details}(black=>Details(), white=>Details()))
+    Score(s::Score) = new(s.total, s.owned, s.stones, [x=>s.colour[x] for x in (black, white)])
 end
 
 """a single position (implicitly, in a search tree).  combines Board,
