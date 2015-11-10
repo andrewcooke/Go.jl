@@ -255,11 +255,3 @@ function evaluate{N}(data::Array{UInt8, 1}, p::Position{N})
     output_data[:,:,n]
 end
 
-function random_expression(n)
-    @assert n > 7
-    e = rand(UInt8, n)
-    e[1:4] = map(UInt8, collect("goxp"))
-    e[5] = 0x00
-    e[6:7] = reinterpret(UInt8, UInt16[n])
-    e
-end

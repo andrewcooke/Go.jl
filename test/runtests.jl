@@ -24,6 +24,14 @@ function random_position(seed, board_size, n_moves)
     p
 end
 
+function random_expression(n)
+    @assert n > 7
+    e = rand(UInt8, n)
+    e[1:4] = map(UInt8, collect("goxp"))
+    e[5] = 0x00
+    e[6:7] = reinterpret(UInt8, UInt16[n])
+    e
+end
 
 include("position.jl")
 include("expression.jl")
