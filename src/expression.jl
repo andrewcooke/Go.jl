@@ -49,6 +49,7 @@
 #     byte 2: (mod size of grid) location of output within the kernel 
 #     byte 3: index into input
 #     remaining bytes as kernel (see below for byte -> float)
+#     all normalised by sqrt(n entries)
 #   1: polynomial
 #     byte 0:
 #       bit 7: 1
@@ -62,6 +63,7 @@
 #       positive power: scale*(input/10)^power
 #       negative power: scale*(3*input)^power (clipped 1/0 -> 127 as byte)
 #       zero power: scale
+#       all normalised by sqrt(n terms)
 # indexing into input is
 #   positive (mod available): direct index into input
 #   negative (mod available): indirect index into input (relative to "here")
@@ -74,7 +76,7 @@ unpack_kernel_size(n::UInt8) = ((n & 0x70) >> 4) + 1, (n & 0x0f) + 1
 unpack_polynomial_size(n::UInt8) = 1 + (n & 0x07)
 
 b2f(b::Int8) = Float32(reinterpret(Int8, b) / sqrt(128))
-f2b(f::Float32) = Int8(min(127, max(-128, round(f * sqrt(128)))))
+f2b(f::AbstractFloat) = Int8(min(127, max(-128, round(f * sqrt(128)))))
 
 const given = 12  # indices that are constant or taken from position
 
@@ -189,8 +191,9 @@ end
 
 function evaluate_kernel{N}(tag::UInt8, e::StatefulIterator, p::Position{N}, d::Array{Int8, 3}, available)
     nx, ny = unpack_kernel_size(tag)
+    n = nx * ny
     edge = b2f(read(e, Int8))
-    cy, cx = [divrem(read(e) % (nx * ny), nx)...] + [1,1]
+    cy, cx = [divrem(read(e) % n, nx)...] + [1,1]
     input = read_input(e, available)
     kernel = reshape([b2f(read(e, Int8)) for i in 1:nx*ny], nx, ny)
     my_acc = zeros(Float32, N, N)
@@ -203,7 +206,7 @@ function evaluate_kernel{N}(tag::UInt8, e::StatefulIterator, p::Position{N}, d::
                 my_acc[i,j] += lookup(i+di-cx, j+dj-cy, i, j, d, input, edge, p)
             end
         end
-        d[i, j, available+1] = f2b(my_acc[i, j])
+        d[i, j, available+1] = f2b(my_acc[i, j] / sqrt(n))
     end
 end
 
@@ -226,7 +229,7 @@ function evaluate_polynomial{N}(tag::UInt8, e::StatefulIterator, p::Position{N},
                 end
             end
             if k == n
-                d[i, j, available+1] = f2b(my_acc[i, j])
+                d[i, j, available+1] = f2b(my_acc[i, j] / sqrt(n))
             end
         end
     end
