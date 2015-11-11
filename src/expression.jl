@@ -113,22 +113,6 @@ function read_input(e::ArrayIterator{UInt8}, available)
     end
 end
 
-function pack_polynomial(coeffs...)
-    n = length(coeffs)
-    @assert 1 <= n <= 5
-    data = [UInt8(n-1) | 0x80]
-    for (input, power, scale) in coeffs
-        @assert -4 <= power <= 4
-        if power > 0
-            scale = scale * 10
-        elseif power < 0
-            scale = scale / 3
-        end
-        push!(data, UInt8(input-1), UInt8(power + 4), f2b(scale))
-    end
-    Fragment(polynomial, data)
-end
-
 function unpack_polynomial(f::Fragment, available)
     e = ArrayIterator(f.data)
     n = unpack_polynomial_size(read(e))
@@ -145,6 +129,22 @@ function unpack_polynomial(f::Fragment, available)
         (input, power, scale)
     end
     [coeff(e) for i in 1:n]
+end
+
+function pack_polynomial(coeffs...)
+    n = length(coeffs)
+    @assert 1 <= n <= 5
+    data = [UInt8(n-1) | 0x80]
+    for (input, power, scale) in coeffs
+        @assert -4 <= power <= 4
+        if power > 0
+            scale = scale * 10
+        elseif power < 0
+            scale = scale / 3
+        end
+        push!(data, UInt8(input-1), UInt8(power + 4), f2b(scale))
+    end
+    Fragment(polynomial, data)
 end
 
 function Base.push!(e::Expression, f::Fragment)
