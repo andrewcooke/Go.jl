@@ -118,7 +118,7 @@ function unpack_kernel(f::Fragment, available)
     nx, ny = unpack_kernel_size(read(e))
     input = read_input(e, available)
     edge = b2f(read(e, Int8))
-    cy, cx = [divrem(read(e) % (nx*ny), nx)...] + [1,1]
+    cy, cx = map(Int, [divrem(read(e) % (nx*ny), nx)...] + [1,1])
     kernel = reshape([b2f(read(e, Int8)) for i in 1:nx*ny], nx, ny)
     (input, edge, (cx, cy), kernel)
 end
@@ -284,17 +284,18 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N})
     end
 end
 
-function evaluate_kernel{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available)
+function evaluate_kernel{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available, transform)
     input, edge, (cx, cy), coeffs = unpack_kernel(f, available)
     nx, ny = size(coeffs)
     my_acc = zeros(Float32, N, N)
     @forall i j N begin
         for di in 1:nx
             for dj in 1:ny
+                ddi, ddj = [di-cx dj-cy] * transform
                 # the best way to understand this is to draw a picture.
                 # it's basically a coord change from one frame (coeffs)
                 # to the other (data).
-                my_acc[i,j] += coeffs[di, dj] * lookup(i+di-cx, j+dj-cy, i, j, d, input, edge, p)
+                my_acc[i,j] += coeffs[di, dj] * lookup(i+ddi, j+ddj, i, j, d, input, edge, p)
             end
         end
         d[i, j, available+1] = f2b(my_acc[i, j] / sqrt(nx*ny))
@@ -315,9 +316,9 @@ function evaluate_polynomial{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, 
     end
 end
 
-function evaluate(f::Fragment, p::Position, d::Array{Int8, 3}, available)
+function evaluate(f::Fragment, p::Position, d::Array{Int8, 3}, available, transform)
     if f.operation == kernel
-        evaluate_kernel(f, p, d, available)
+        evaluate_kernel(f, p, d, available, transform)
     elseif f.operation == polynomial
         evaluate_polynomial(f, p, d, available)
     elseif available > 0
@@ -329,12 +330,16 @@ end
 
 function evaluate{N}(e::Expression, p::Position{N})
     n = length(e.fragment)
-    output_data = zeros(Int8, N, N, n)
-    for i in 1:n
-        evaluate(e.fragment[i], p, output_data, i-1)
+    my_acc = zeros(Float32, N, N)
+    for transform in ([1 0; 0 1], [0 1; -1 0], [-1 0; 0 -1], [0 -1; 1 0])
+        output_data = zeros(Int8, N, N, n)
+        for i in 1:n
+            evaluate(e.fragment[i], p, output_data, i-1, transform)
+        end
+        # output is final frame (most complex)
+        my_acc += map(b2f, output_data[:,:,n])
     end
-    # output is final frame (most complex)
-    output_data[:,:,n]
+    my_acc
 end
 
 function evaluate(data::Array{UInt8, 1}, p::Position)
