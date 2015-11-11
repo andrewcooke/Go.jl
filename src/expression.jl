@@ -331,7 +331,11 @@ end
 function evaluate{N}(e::Expression, p::Position{N})
     n = length(e.fragment)
     my_acc = zeros(Float32, N, N)
-    for transform in ([1 0; 0 1], [0 1; -1 0], [-1 0; 0 -1], [0 -1; 1 0])
+    # these are the 8 ways that kernels can be evaluated.  if we treat
+    # the numbers as log(prob) then it makes a kind of weird sense
+    # that we are adding these together.
+    for transform in ([1 0; 0 1], [0 1; -1 0], [-1 0; 0 -1], [0 -1; 1 0],
+                      [1 0; 0 -1], [0 1; 1 0], [-1 0; 0 1], [0 -1; -1 0])
         output_data = zeros(Int8, N, N, n)
         for i in 1:n
             evaluate(e.fragment[i], p, output_data, i-1, transform)

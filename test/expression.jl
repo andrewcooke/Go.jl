@@ -32,7 +32,7 @@ p = Position{9}()
 move!(p, black, 3, 3)
 move!(p, white, 7, 7)
 e = GoCL.Expression()
-push!(e, GoCL.pack_kernel(3, 0, (1, 1), [0 0; 0 1]))
+push!(e, GoCL.pack_kernel(3, 0, (1, 1), [0 0; 0 0; 0 1]))
 d = fix(evaluate(e, p))
 compare(d, "expression/given-kernel-2.txt")
 
