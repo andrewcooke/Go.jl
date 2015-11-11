@@ -53,8 +53,7 @@
 #   1: polynomial
 #     byte 0:
 #       bit 7: 1
-#       bit 6-4: unused
-#       bit 0-3: (+1) number of inputs
+#       bit 0-6: (mod 5 + 1) number of inputs
 #     remaining bytes as triplets:
 #       byte 0: index into input
 #       byte 1: scale (see below for byte -> float)
@@ -71,37 +70,78 @@
 #   float(b) = signed(b) / sqrt(128) with hard clipping
 
 
+# --- data structuring
+
 
 unpack_kernel_size(n::UInt8) = ((n & 0x70) >> 4) + 1, (n & 0x0f) + 1
-unpack_polynomial_size(n::UInt8) = 1 + (n & 0x07)
+unpack_polynomial_size(n::UInt8) = Int(((n & 0x7f) % 5) + 1)
 
 b2f(b::Int8) = Float32(reinterpret(Int8, b) / sqrt(128))
 f2b(f::AbstractFloat) = Int8(min(127, max(-128, round(f * sqrt(128)))))
 
 const given = 12  # indices that are constant or taken from position
+const header = map(UInt8, collect("goxp"))
 
-function count_operations(e)
-    count = 0
-    try
-        while true
-            tag = read(e)
-            if tag & 0x80 == 0
-                n = prod(unpack_kernel_size(tag))
-                read(e, n+3)  # drop edge + locn + index + kernel
-            else
-                n = unpack_polynomial_size(tag)
-                read(e, n*3)
-            end
-            count += 1
-        end
-    catch x
-        # ignore end of data
-        if ! isa(x, BoundsError)
-            rethrow()
-        end
-    end
-    count
+@enum Operation kernel polynomial junk
+
+@auto_hash_equals immutable Fragment
+    # we ony parse to this level because we need to preserve all bits
+    # for evolutionary algorithms.  parsing to semantical level
+    # discards some bits and life gets complicated.
+    operation::Operation
+    data::Vector{UInt8}
 end
+
+@auto_hash_equals type Expression
+    version::UInt8
+    # must be maintained by mutating operations
+    length::UInt16
+    fragment::Vector{Fragment}
+    Expression(version::UInt8) = new(version, 7, Fragment[])
+    Expression() = Expression(0x00)
+end
+
+function Base.push!(e::Expression, f::Fragment)
+    push!(e.fragment, f)
+    e.length += length(f.data)
+end
+
+function unpack(data::Vector{UInt8})
+    d = ArrayIterator(data)
+    @assert read(d, 4) == header
+    e = Expression(read(d))
+    length = read(d, UInt16)
+    
+    while !done(d)
+        tag = peek(d)
+        if tag & 0x80 == 0
+            op = kernel
+            n = prod(unpack_kernel_size(tag)) + 4
+        else
+            op = polynomial
+            n = unpack_polynomial_size(tag) * 3 + 1
+        end
+        if n > length - d.state
+            f = Fragment(junk, read(d, length - d.state + 1))
+        else
+            f = Fragment(op, read(d, n))
+        end
+        push!(e, f)
+    end
+
+    # this is all we support right now
+    @assert e.version == 0x00
+    @assert e.length == length
+    e
+end
+
+Expression(data::Vector{UInt8}) = unpack(data)
+
+pack(e::Expression) = vcat(header, [0x00], reinterpret(UInt8, [e.length]), [f.data for f in e.fragment]...)
+
+
+# --- evaluation
+
 
 function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N})
     if 1 <= x <= N && 1 <= y <= N
@@ -177,7 +217,7 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N})
     end
 end
 
-function read_input(e::StatefulIterator, available)
+function read_input(e::ArrayIterator{UInt8}, available)
     input = read(e, Int8)
     n = given + available
     # abs(-128) = -128 for Int8
@@ -189,8 +229,9 @@ function read_input(e::StatefulIterator, available)
     end
 end
 
-function evaluate_kernel{N}(tag::UInt8, e::StatefulIterator, p::Position{N}, d::Array{Int8, 3}, available)
-    nx, ny = unpack_kernel_size(tag)
+function evaluate_kernel{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available)
+    e = ArrayIterator(f.data)
+    nx, ny = unpack_kernel_size(read(e))
     n = nx * ny
     edge = b2f(read(e, Int8))
     cy, cx = [divrem(read(e) % n, nx)...] + [1,1]
@@ -210,8 +251,9 @@ function evaluate_kernel{N}(tag::UInt8, e::StatefulIterator, p::Position{N}, d::
     end
 end
 
-function evaluate_polynomial{N}(tag::UInt8, e::StatefulIterator, p::Position{N}, d::Array{Int8, 3}, available)
-    n = unpack_polynomial_size(tag)
+function evaluate_polynomial{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available)
+    e = ArrayIterator(f.data)
+    n = unpack_polynomial_size(read(e))
     my_acc = zeros(Float32, N, N)
     for k in 1:n
         input = read_input(e, available)
@@ -235,26 +277,29 @@ function evaluate_polynomial{N}(tag::UInt8, e::StatefulIterator, p::Position{N},
     end
 end
 
-function evaluate(e::StatefulIterator, p::Position, d::Array{Int8, 3}, available)
-    tag = read(e)
-    if tag &0x80 == 0
-        evaluate_kernel(tag, e, p, d, available)
-    else
-        evaluate_polynomial(tag, e, p, d, available)
+function evaluate(f::Fragment, p::Position, d::Array{Int8, 3}, available)
+    if f.operation == kernel
+        evaluate_kernel(f, p, d, available)
+    elseif f.operation == polynomial
+        evaluate_polynomial(f, p, d, available)
+    elseif available > 0
+        # copy previous data on no-op so that final data (used as
+        # output) is always valid
+        d[:,:,available+1] = d[:,:,available]
     end
 end
 
-function evaluate{N}(data::Array{UInt8, 1}, p::Position{N})
-    e = StatefulIterator(data)
-    @assert read(e, 4) == map(UInt8, collect("goxp"))   # header
-    @assert read(e) == 0x00                             # version
-    @assert read(e, UInt16) == length(data)             # length
-    n = count_operations(copy(e))
+function evaluate{N}(e::Expression, p::Position{N})
+    n = length(e.fragment)
     output_data = zeros(Int8, N, N, n)
     for i in 1:n
-        evaluate(e, p, output_data, i-1)
-#        println(fix(map(b2f, output_data[:,:,i])))
+        evaluate(e.fragment[i], p, output_data, i-1)
     end
+    # output is final frame (most complex)
     output_data[:,:,n]
+end
+
+function evaluate(data::Array{UInt8, 1}, p::Position)
+    evaluate(Expression(data), p)
 end
 

@@ -5,6 +5,7 @@ using Base.Test
 
 const regen = false
 
+exists(path) = stat(path).inode != 0
 
 function random_position(seed, board_size, n_moves)
     srand(seed)
@@ -37,7 +38,8 @@ function random_expression(n)
 end
 
 function compare(x, path)
-    if regen
+    if regen || ! exists(path)
+        print("!!!")
         open(path, "w") do io
             print(io, x)
         end
