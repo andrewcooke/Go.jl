@@ -85,7 +85,7 @@ const header = map(UInt8, collect("goxp"))
 @enum Operation kernel polynomial junk
 
 @auto_hash_equals immutable Fragment
-    # we ony parse to this level because we need to preserve all bits
+    # we only parse to this level because we need to preserve all bits
     # for evolutionary algorithms.  parsing to semantical level
     # discards some bits and life gets complicated.
     operation::Operation
@@ -99,6 +99,52 @@ end
     fragment::Vector{Fragment}
     Expression(version::UInt8) = new(version, 7, Fragment[])
     Expression() = Expression(0x00)
+end
+
+function read_input(e::ArrayIterator{UInt8}, available)
+    input = read(e, Int8)
+    n = given + available
+    # abs(-128) = -128 for Int8
+    index = abs(Int(input)) % n
+    if input < 0
+        n - index
+    else
+        1 + index
+    end
+end
+
+function pack_polynomial(coeffs...)
+    n = length(coeffs)
+    @assert 1 <= n <= 5
+    data = [UInt8(n-1) | 0x80]
+    for (input, power, scale) in coeffs
+        @assert -4 <= power <= 4
+        if power > 0
+            scale = scale * 10
+        elseif power < 0
+            scale = scale / 3
+        end
+        push!(data, UInt8(input-1), UInt8(power + 4), f2b(scale))
+    end
+    Fragment(polynomial, data)
+end
+
+function unpack_polynomial(f::Fragment, available)
+    e = ArrayIterator(f.data)
+    n = unpack_polynomial_size(read(e))
+    function coeff(e)
+        input = read_input(e, available)
+        power = Int(read(e) % 9) - 4
+        if power == 0
+            scale = b2f(read(e, Int8))
+        elseif power > 0
+            scale = b2f(read(e, Int8)) / 10
+        else
+            scale = b2f(read(e, Int8)) * 3
+        end
+        (input, power, scale)
+    end
+    [coeff(e) for i in 1:n]
 end
 
 function Base.push!(e::Expression, f::Fragment)
@@ -217,18 +263,6 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N})
     end
 end
 
-function read_input(e::ArrayIterator{UInt8}, available)
-    input = read(e, Int8)
-    n = given + available
-    # abs(-128) = -128 for Int8
-    index = abs(Int(input)) % n
-    if input < 0
-        n - index
-    else
-        1 + index
-    end
-end
-
 function evaluate_kernel{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available)
     e = ArrayIterator(f.data)
     nx, ny = unpack_kernel_size(read(e))
@@ -249,40 +283,6 @@ function evaluate_kernel{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, avai
         end
         d[i, j, available+1] = f2b(my_acc[i, j] / sqrt(n))
     end
-end
-
-function pack_polynomial(coeffs...)
-    n = length(coeffs)
-    @assert 1 <= n <= 5
-    data = [UInt8(n-1) | 0x80]
-    for (input, power, scale) in coeffs
-        @assert -4 <= power <= 4
-        if power > 0
-            scale = scale * 10
-        elseif power < 0
-            scale = scale / 3
-        end
-        push!(data, UInt8(input-1), UInt8(power + 4), f2b(scale))
-    end
-    Fragment(polynomial, data)
-end
-
-function unpack_polynomial(f::Fragment, available)
-    e = ArrayIterator(f.data)
-    n = unpack_polynomial_size(read(e))
-    function coeff(e)
-        input = read_input(e, available)
-        power = Int(read(e) % 9) - 4
-        if power == 0
-            scale = b2f(read(e, Int8))
-        elseif power > 0
-            scale = b2f(read(e, Int8)) / 10
-        else
-            scale = b2f(read(e, Int8)) * 3
-        end
-        (input, power, scale)
-    end
-    [coeff(e) for i in 1:n]
 end
 
 function evaluate_polynomial{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available)
