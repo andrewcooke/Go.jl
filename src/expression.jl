@@ -113,12 +113,33 @@ function read_input(e::ArrayIterator{UInt8}, available)
     end
 end
 
+function unpack_kernel(f::Fragment, available)
+    e = ArrayIterator(f.data)
+    nx, ny = unpack_kernel_size(read(e))
+    input = read_input(e, available)
+    edge = b2f(read(e, Int8))
+    cy, cx = [divrem(read(e) % (nx*ny), nx)...] + [1,1]
+    kernel = reshape([b2f(read(e, Int8)) for i in 1:nx*ny], nx, ny)
+    (input, edge, (cx, cy), kernel)
+end
+
+function pack_kernel(input, edge, c, coeffs)
+    cx, cy = c
+    nx, ny = size(coeffs)
+    data = [UInt8(nx-1) << 4 | UInt8(ny-1)]
+    push!(data, UInt8(input-1), f2b(edge), UInt8((cy-1)*nx + cx-1))
+    append!(data, map(f2b, reshape(coeffs, nx*ny)))
+    Fragment(kernel, data)
+end
+
 function unpack_polynomial(f::Fragment, available)
     e = ArrayIterator(f.data)
     n = unpack_polynomial_size(read(e))
     function coeff(e)
         input = read_input(e, available)
         power = Int(read(e) % 9) - 4
+        # squeezing as much useful work as possible from available
+        # bits
         if power == 0
             scale = b2f(read(e, Int8))
         elseif power > 0
@@ -264,29 +285,23 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N})
 end
 
 function evaluate_kernel{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available)
-    e = ArrayIterator(f.data)
-    nx, ny = unpack_kernel_size(read(e))
-    n = nx * ny
-    edge = b2f(read(e, Int8))
-    cy, cx = [divrem(read(e) % n, nx)...] + [1,1]
-    input = read_input(e, available)
-    kernel = reshape([b2f(read(e, Int8)) for i in 1:nx*ny], nx, ny)
+    input, edge, (cx, cy), coeffs = unpack_kernel(f, available)
+    nx, ny = size(coeffs)
     my_acc = zeros(Float32, N, N)
     @forall i j N begin
         for di in 1:nx
             for dj in 1:ny
                 # the best way to understand this is to draw a picture.
-                # it's basically a coord change from one frame (kernel)
+                # it's basically a coord change from one frame (coeffs)
                 # to the other (data).
-                my_acc[i,j] += kernel[di, dj] * lookup(i+di-cx, j+dj-cy, i, j, d, input, edge, p)
+                my_acc[i,j] += coeffs[di, dj] * lookup(i+di-cx, j+dj-cy, i, j, d, input, edge, p)
             end
         end
-        d[i, j, available+1] = f2b(my_acc[i, j] / sqrt(n))
+        d[i, j, available+1] = f2b(my_acc[i, j] / sqrt(nx*ny))
     end
 end
 
 function evaluate_polynomial{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available)
-    e = ArrayIterator(f.data)
     coeffs = unpack_polynomial(f, available)
     my_acc = zeros(Float32, N, N)
     for (input, power, scale) in coeffs
