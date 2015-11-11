@@ -3,8 +3,6 @@ using GoCL
 using Base.Test
 
 
-const regen = false
-
 exists(path) = stat(path).inode != 0
 
 function random_position(seed, board_size, n_moves)
@@ -38,7 +36,7 @@ function random_expression(n)
 end
 
 function compare(x, path)
-    if regen || ! exists(path)
+    if !exists(path)
         print("!!!")
         open(path, "w") do io
             print(io, x)

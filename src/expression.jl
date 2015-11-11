@@ -56,8 +56,8 @@
 #       bit 0-6: (mod 5 + 1) number of inputs
 #     remaining bytes as triplets:
 #       byte 0: index into input
-#       byte 1: scale (see below for byte -> float)
-#       byte 2: (mod 9 - 4) power
+#       byte 1: (mod 9 - 4) power
+#       byte 2: scale (see below for byte -> float)
 #     polynomials are evaluated as:
 #       positive power: scale*(input/10)^power
 #       negative power: scale*(3*input)^power (clipped 1/0 -> 127 as byte)
@@ -77,7 +77,7 @@ unpack_kernel_size(n::UInt8) = ((n & 0x70) >> 4) + 1, (n & 0x0f) + 1
 unpack_polynomial_size(n::UInt8) = Int(((n & 0x7f) % 5) + 1)
 
 b2f(b::Int8) = Float32(reinterpret(Int8, b) / sqrt(128))
-f2b(f::AbstractFloat) = Int8(min(127, max(-128, round(f * sqrt(128)))))
+f2b(f::Number) = Int8(min(127, max(-128, round(f * sqrt(128)))))
 
 const given = 12  # indices that are constant or taken from position
 const header = map(UInt8, collect("goxp"))
@@ -106,7 +106,7 @@ function Base.push!(e::Expression, f::Fragment)
     e.length += length(f.data)
 end
 
-function unpack(data::Vector{UInt8})
+function unpack_expression(data::Vector{UInt8})
     d = ArrayIterator(data)
     @assert read(d, 4) == header
     e = Expression(read(d))
@@ -135,9 +135,9 @@ function unpack(data::Vector{UInt8})
     e
 end
 
-Expression(data::Vector{UInt8}) = unpack(data)
+Expression(data::Vector{UInt8}) = unpack_expression(data)
 
-pack(e::Expression) = vcat(header, [0x00], reinterpret(UInt8, [e.length]), [f.data for f in e.fragment]...)
+pack_expression(e::Expression) = vcat(header, [0x00], reinterpret(UInt8, [e.length]), [f.data for f in e.fragment]...)
 
 
 # --- evaluation
@@ -244,36 +244,59 @@ function evaluate_kernel{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, avai
                 # the best way to understand this is to draw a picture.
                 # it's basically a coord change from one frame (kernel)
                 # to the other (data).
-                my_acc[i,j] += lookup(i+di-cx, j+dj-cy, i, j, d, input, edge, p)
+                my_acc[i,j] += kernel[di, dj] * lookup(i+di-cx, j+dj-cy, i, j, d, input, edge, p)
             end
         end
         d[i, j, available+1] = f2b(my_acc[i, j] / sqrt(n))
     end
 end
 
-function evaluate_polynomial{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available)
+function pack_polynomial(coeffs...)
+    n = length(coeffs)
+    @assert 1 <= n <= 5
+    data = [UInt8(n-1) | 0x80]
+    for (input, power, scale) in coeffs
+        @assert -4 <= power <= 4
+        if power > 0
+            scale = scale * 10
+        elseif power < 0
+            scale = scale / 3
+        end
+        push!(data, UInt8(input-1), UInt8(power + 4), f2b(scale))
+    end
+    Fragment(polynomial, data)
+end
+
+function unpack_polynomial(f::Fragment, available)
     e = ArrayIterator(f.data)
     n = unpack_polynomial_size(read(e))
-    my_acc = zeros(Float32, N, N)
-    for k in 1:n
+    function coeff(e)
         input = read_input(e, available)
-        scale = b2f(read(e, Int8))
         power = Int(read(e) % 9) - 4
-        @forall i j N begin
-            if power == 0
-                my_acc[i, j] += scale
-            else
-                value = lookup(i, j, 0, 0, d, input, 0.0, p)
-                if power > 0
-                    my_acc[i, j] += scale * (value / 10)^power
-                else
-                    my_acc[i, j] += scale * (3 * value)^power
-                end
-            end
-            if k == n
-                d[i, j, available+1] = f2b(my_acc[i, j] / sqrt(n))
-            end
+        if power == 0
+            scale = b2f(read(e, Int8))
+        elseif power > 0
+            scale = b2f(read(e, Int8)) / 10
+        else
+            scale = b2f(read(e, Int8)) * 3
         end
+        (input, power, scale)
+    end
+    [coeff(e) for i in 1:n]
+end
+
+function evaluate_polynomial{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available)
+    e = ArrayIterator(f.data)
+    coeffs = unpack_polynomial(f, available)
+    my_acc = zeros(Float32, N, N)
+    for (input, power, scale) in coeffs
+        @forall i j N begin
+            value = lookup(i, j, 0, 0, d, input, 0.0, p)
+            my_acc[i, j] += scale * value^power
+        end
+    end
+    @forall i j N begin
+        d[i, j, available+1] = f2b(my_acc[i, j] / sqrt(length(coeffs)))
     end
 end
 
@@ -302,4 +325,8 @@ end
 function evaluate(data::Array{UInt8, 1}, p::Position)
     evaluate(Expression(data), p)
 end
+
+
+# --- move extraction
+
 
