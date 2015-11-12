@@ -43,31 +43,29 @@
 #   bit 7 of first byte gives type and size
 #   0: kernel
 #     byte 0: 
-#       bit 7: 0
+#       bit 7: 0 (polynomial tag)
 #       bit 0-6: size in x and y (see code)
 #     byte 1: byte used for input outside board edges
 #     byte 2: (mod size of grid) location of output within the kernel 
 #     byte 3: index into input
 #     remaining bytes as kernel (see below for byte -> float)
 #     all normalised by sqrt(n entries)
-#   1: polynomial
+#   1: arithmetic
 #     byte 0:
-#       bit 7: 1
-#       bit 0-6: (mod 5 + 1) number of inputs
-#     remaining bytes as triplets:
+#       bit 7: 1 (arithmetic tag)
+#       bit 6:
+#         0: additiion/subtraction
+#         1: multiplication/division
+#       bit 5-2: 4 flags for multiplication/division (after first term)
+#       bit 1-0: (+1) number of terms
+#     remaining bytes as pairs:
 #       byte 0: index into input
-#       byte 1: (mod 9 - 4) power
-#       byte 2: scale (see below for byte -> float)
-#     polynomials are evaluated as:
-#       positive power: scale*(input/10)^power
-#       negative power: scale*(3*input)^power (clipped 1/0 -> 127 as byte)
-#       zero power: scale
-#       all normalised by sqrt(n terms)
+#       byte 1: scale (see below for byte -> float)
 # indexing into input is
 #   positive (mod available): direct index into input
 #   negative (mod available): indirect index into input (relative to "here")
 # general encoding from byte <-> float is
-#   float(b) = signed(b) / sqrt(128) with hard clipping
+#   float(b) = signed(b) / 16 with hard clipping
 
 
 # --- data structuring
@@ -353,4 +351,13 @@ end
 
 # --- move extraction
 
+
+# the above generates a matrix of 'values' that can be positive or
+# negative.  the best interpretation i can give to that is log(prob).
+# and in a sense i get to choose, because if i decide that and evolve
+# on that basis, then that is what i get.
+
+# however, it's damn spiky.  so any random sampling will be dominated
+# by the largest numbers.  so instead, we just pick off the largest
+# scoring locations (and then exclude invalid moves etc).
 
