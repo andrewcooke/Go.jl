@@ -35,15 +35,16 @@ function random_expression(n)
     e
 end
 
-function compare(x, path)
+function compare(path, objs...)
+    print(path)
+    s = join([sprint(print, x) for x in objs], "\n") * "\n"
     if !exists(path)
-        print("!!!")
+        print(" (w)")
         open(path, "w") do io
-            print(io, x)
+            print(io, s)
         end
     end
-    print(path)
-    @test sprint(print, x) == open(readall, path, "r")
+    @test s == open(readall, path, "r")
     println(" ok")
 end
 

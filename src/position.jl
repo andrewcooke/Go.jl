@@ -563,7 +563,7 @@ end
 # --- query state
 
 
-# TODO - really needs move history here
+# TODO - really needs move history herep
 function valid{N}(p::Position{N}, t::Point, x, y)
     if point(p, x, y) != empty
         return false
