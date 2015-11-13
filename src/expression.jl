@@ -215,7 +215,7 @@ pack_expression(e::Expression) = vcat(header, [0x00], reinterpret(UInt8, [e.leng
 # --- evaluation
 
 
-function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N})
+function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N}, t::Point)
     if 1 <= x <= N && 1 <= y <= N
         if input > given
             # yay, simple lookup
@@ -227,8 +227,8 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N})
             # constant 1
             one(Float32)
         elseif input == 3
-            # 1 for black, 0 for empty, -1 for white
-            Float32(Int(point(p, x, y)))
+            # 1 for "our" colour, 0 for space, "-1" for opponent's colour
+            Float32(Int(t) * Int(point(p, x, y)))
         elseif input == 4
             if ox != 0 && oy != 0
                 # kernel: 1 if same group as 'centre', -1 if not
@@ -254,14 +254,14 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N})
                 edge
             end
         elseif input == 7
-            # distance to nearest stone (-ve for white)
-            Float32(p.flood.distance[x, y])
+            # distance to nearest stone (-ve for opponent's colour)
+            Float32(Int(t) * p.flood.distance[x, y])
         elseif input == 8
-            # 1 if owned by black, -1 owned by white, 0 otherwise
+            # 1 if owned by us, -1 owned by opponent, 0 otherwise
             b = p.space.border[x, y]
             if b == 0 || b == 3
                 zero(Float32)
-            elseif b == 1
+            elseif b == border_mask(t)
                 one(Float32)
             else
                 -one(Float32)
@@ -275,8 +275,8 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N})
                 Float32(p.space.index[x, y])
             end
         elseif input == 10
-            # constant score (+ve for black)
-            Float32(p.score.total)
+            # constant score (+ve for us)
+            Float32(p.score.total * Int(t))
         elseif input == 11
             # fraction of space that is 'owned'
             p.score.owned
@@ -289,7 +289,7 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N})
     end
 end
 
-function evaluate_kernel{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available, transform)
+function evaluate_kernel{N}(f::Fragment, p::Position{N}, t::Point, d::Array{Int8, 3}, available, transform)
     input, edge, (cx, cy), coeffs = unpack_kernel(f, available)
     nx, ny = size(coeffs)
     my_acc = zeros(Float32, N, N)
@@ -300,19 +300,19 @@ function evaluate_kernel{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, avai
                 # the best way to understand this is to draw a picture.
                 # it's basically a coord change from one frame (coeffs)
                 # to the other (data).
-                my_acc[i,j] += coeffs[di, dj] * lookup(i+ddi, j+ddj, i, j, d, input, edge, p)
+                my_acc[i,j] += coeffs[di, dj] * lookup(i+ddi, j+ddj, i, j, d, input, edge, p, t)
             end
         end
         d[i, j, available+1] = f2b(my_acc[i, j] / sqrt(nx*ny))
     end
 end
 
-function evaluate_arithmetic{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available, transform)
+function evaluate_arithmetic{N}(f::Fragment, p::Position{N}, t::Point, d::Array{Int8, 3}, available, transform)
     coeffs = unpack_addition(f, available)
     my_acc = zeros(Float32, N, N)
     for (input, scale, change) in coeffs
         @forall i j N begin
-            value = lookup(i, j, 0, 0, d, input, 0.0, p)
+            value = lookup(i, j, 0, 0, d, input, 0.0, p, t)
             my_acc[i, j] += scale * (change ? transform(value) : value)
         end
     end
@@ -321,13 +321,13 @@ function evaluate_arithmetic{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, 
     end
 end
 
-function evaluate(f::Fragment, p::Position, d::Array{Int8, 3}, available, transform)
+function evaluate(f::Fragment, p::Position, t::Point, d::Array{Int8, 3}, available, transform)
     if f.operation == kernel
-        evaluate_kernel(f, p, d, available, transform)
+        evaluate_kernel(f, p, t, d, available, transform)
     elseif f.operation == addition
-        evaluate_arithmetic(f, p, d, available, x -> sin(pi * x / 128))
+        evaluate_arithmetic(f, p, t, d, available, x -> sin(pi * x / 128))
     elseif f.operation == product
-        evaluate_arithmetic(f, p, d, available, x -> 1/x)
+        evaluate_arithmetic(f, p, t, d, available, x -> 1/x)
     elseif available > 0
         # copy previous data on no-op so that final data (used as
         # output) is always valid
@@ -335,7 +335,7 @@ function evaluate(f::Fragment, p::Position, d::Array{Int8, 3}, available, transf
     end
 end
 
-function evaluate{N}(e::Expression, p::Position{N})
+function evaluate{N}(e::Expression, p::Position{N}, t::Point)
     n = length(e.fragment)
     my_acc = zeros(Float32, N, N)
     # these are the 8 ways that kernels can be evaluated.  if we treat
@@ -345,7 +345,7 @@ function evaluate{N}(e::Expression, p::Position{N})
                       [1 0; 0 -1], [0 1; 1 0], [-1 0; 0 1], [0 -1; -1 0])
         output_data = zeros(Int8, N, N, n)
         for i in 1:n
-            evaluate(e.fragment[i], p, output_data, i-1, transform)
+            evaluate(e.fragment[i], p, t, output_data, i-1, transform)
         end
         # output is final frame (most complex)
         my_acc += map(b2f, output_data[:,:,n])
@@ -353,8 +353,10 @@ function evaluate{N}(e::Expression, p::Position{N})
     my_acc
 end
 
-function evaluate(e::Array{UInt8, 1}, p::Position)
-    evaluate(Expression(e), p)
+"""return an array of log(p) of the probability that a move is good at
+a particular board point, for colour t."""
+function evaluate(e::Array{UInt8, 1}, p::Position, t::Point)
+    evaluate(Expression(e), p, t)
 end
 
 
@@ -371,7 +373,7 @@ end
 # scoring locations (and then exclude invalid moves etc).
 
 function moves{N}(e::Array{UInt8, 1}, p::Position{N}, t::Point)
-    logp = evaluate(e, p)
+    logp = evaluate(e, p, t)
     indexed = reshape([(logp[i, j], (i, j)) for i in 1:N, j in 1:N], N*N)
     positive = filter(x -> x[1] > 0, indexed)
     possible = filter(x -> valid(p, t, x[2]...), positive)

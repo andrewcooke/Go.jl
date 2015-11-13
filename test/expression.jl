@@ -3,7 +3,7 @@ for i in 1:10
     p = random_position(i, 9, 20)
     e = random_expression(rand(1:1000))
     @test GoCL.pack_expression(GoCL.unpack_expression(e)) == e
-    d = evaluate(e, p)
+    d = evaluate(e, p, white)
     compare("expression/random-$i.txt", fix(d))
     compare("expression/moves-$i.txt", p, moves(e, p, black))
 end
@@ -17,7 +17,7 @@ p = random_position(1, 9, 20)
 for i in 1:GoCL.given
     e = GoCL.Expression()
     push!(e, GoCL.pack_addition((i, 1, false)))
-    d = fix(evaluate(e, p))
+    d = fix(evaluate(e, p, black))
     compare("expression/given-addition-$i.txt", d)
 end
 
@@ -28,7 +28,7 @@ p = Position{9}()
 move!(p, black, 3, 3)
 e = GoCL.Expression()
 push!(e, GoCL.pack_kernel(3, 0, (1, 1), ones(Int, 1, 1)))
-d = fix(evaluate(e, p))
+d = fix(evaluate(e, p, black))
 compare("expression/given-kernel-1.txt", d)
 
 p = Position{9}()
@@ -36,7 +36,7 @@ move!(p, black, 3, 3)
 move!(p, white, 7, 7)
 e = GoCL.Expression()
 push!(e, GoCL.pack_kernel(3, 0, (1, 1), [0 0; 0 0; 0 1]))
-d = fix(evaluate(e, p))
+d = fix(evaluate(e, p, black))
 compare("expression/given-kernel-2.txt", d)
 
 p = Position{9}()
