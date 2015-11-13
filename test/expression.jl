@@ -5,7 +5,7 @@ for i in 1:10
     @test GoCL.pack_expression(GoCL.unpack_expression(e)) == e
     d = evaluate(e, p)
     compare(fix(d), "expression/random-$i.txt")
-    compare(moves(e, p), "expression/moves-$i.txt")
+    compare(moves(e, p, black), "expression/moves-$i.txt")
 end
 
 f = GoCL.pack_product((1, 2, false), (3, 4, true))

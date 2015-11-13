@@ -370,8 +370,10 @@ end
 # by the largest numbers.  so instead, we just pick off the largest
 # scoring locations (and then exclude invalid moves etc).
 
-function moves{N}(e::Array{UInt8, 1}, p::Position{N})
+function moves{N}(e::Array{UInt8, 1}, p::Position{N}, t::Point)
     logp = evaluate(e, p)
     indexed = reshape([(logp[i, j], (i, j)) for i in 1:N, j in 1:N], N*N)
-    map(x -> x[2], sort(shuffle(filter(x -> x[1] > 0, indexed)), by=x -> x[1]))
+    positive = filter(x -> x[1] > 0, indexed)
+    possible = filter(x -> valid(p, t, x[2]...), positive)
+    map(x -> x[2], sort(shuffle(possible), by=x -> x[1]))
 end

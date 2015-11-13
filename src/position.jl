@@ -564,10 +564,23 @@ end
 
 
 # TODO - really needs move history here
-function valid(p, t, x, y)
+function valid{N}(p::Position{N}, t::Point, x, y)
     if point(p, x, y) != empty
         return false
     end
-    if p.space.index[x, y]
+    @forneighbours x y N xx yy begin
+        tt = point(p, xx, yy)
+        if tt == empty
+            return true
+        elseif tt == t
+            if p.groups.lives[p.groups.index[xx, yy]] > 1
+                return true
+            end
+        else
+            if p.groups.lives[p.groups.index[xx, yy]] == 1
+                return true
+            end
+        end
     end
+    false
 end
