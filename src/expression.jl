@@ -56,7 +56,7 @@
 #       bit 6:
 #         0: additiion/subtraction
 #         1: multiplication/division
-#       bit 5-2: 4 flags for multiplication/division (after first term)
+#       bit 5-2: 4 flags (after first) mult/div and sine
 #       bit 1-0: (+1) number of terms
 #     remaining bytes as pairs:
 #       byte 0: index into input
@@ -72,15 +72,15 @@
 
 
 unpack_kernel_size(n::UInt8) = ((n & 0x70) >> 4) + 1, (n & 0x0f) + 1
-unpack_polynomial_size(n::UInt8) = Int(((n & 0x7f) % 5) + 1)
+unpack_arithmetic_size(n::UInt8) = (n & 0x03) + 1
 
-b2f(b::Int8) = Float32(reinterpret(Int8, b) / sqrt(128))
-f2b(f::Number) = Int8(min(127, max(-128, round(f * sqrt(128)))))
+b2f(b::Int8) = Float32(reinterpret(Int8, b) / 16)
+f2b(f::Number) = Int8(min(127, max(-128, round(f * 16))))
 
 const given = 12  # indices that are constant or taken from position
 const header = map(UInt8, collect("goxp"))
 
-@enum Operation kernel polynomial junk
+@enum Operation kernel product addition junk
 
 @auto_hash_equals immutable Fragment
     # we only parse to this level because we need to preserve all bits
@@ -130,40 +130,44 @@ function pack_kernel(input, edge, c, coeffs)
     Fragment(kernel, data)
 end
 
-function unpack_polynomial(f::Fragment, available)
+function unpack_arithmetic(f::Fragment, available)
     e = ArrayIterator(f.data)
-    n = unpack_polynomial_size(read(e))
-    function coeff(e)
+    tag = read(e)
+    n = unpack_arithmetic_size(tag)
+    flags = ((tag >> 2) & 0x0f) << 1
+    function term(e)
         input = read_input(e, available)
-        power = Int(read(e) % 9) - 4
-        # squeezing as much useful work as possible from available
-        # bits
-        if power == 0
-            scale = b2f(read(e, Int8))
-        elseif power > 0
-            scale = b2f(read(e, Int8)) / 10
-        else
-            scale = b2f(read(e, Int8)) * 3
-        end
-        (input, power, scale)
+        scale = b2f(read(e, Int8))
+        change = flags & 0x01 == 0x01
+        flags = flags >> 1
+        (input, scale, change)
     end
-    [coeff(e) for i in 1:n]
+    [term(e) for i in 1:n]
 end
 
-function pack_polynomial(coeffs...)
+unpack_product = unpack_arithmetic
+unpack_addition = unpack_arithmetic
+
+function pack_arithmetic(coeffs...)
     n = length(coeffs)
     @assert 1 <= n <= 5
     data = [UInt8(n-1) | 0x80]
-    for (input, power, scale) in coeffs
-        @assert -4 <= power <= 4
-        if power > 0
-            scale = scale * 10
-        elseif power < 0
-            scale = scale / 3
-        end
-        push!(data, UInt8(input-1), UInt8(power + 4), f2b(scale))
+    flags, mask = 0x00, 0x01
+    for (input, scale, change) in coeffs
+        push!(data, UInt8(input-1), f2b(scale))
+        flags = flags | (change ? mask : 0x00)
+        mask = mask << 1
     end
-    Fragment(polynomial, data)
+    data[1] = data[1] | ((flags >> 1) << 2)
+    data
+end
+
+pack_addition(coeffs...) = Fragment(addition, pack_arithmetic(coeffs...))
+
+function pack_product(coeffs...)
+    data = pack_arithmetic(coeffs...)
+    data[1] = data[1] | 0x40
+    Fragment(product, data)
 end
 
 function Base.push!(e::Expression, f::Fragment)
@@ -182,9 +186,12 @@ function unpack_expression(data::Vector{UInt8})
         if tag & 0x80 == 0
             op = kernel
             n = prod(unpack_kernel_size(tag)) + 4
+        elseif tag & 0x40 == 0
+            op = addition
+            n = unpack_arithmetic_size(tag) * 2 + 1
         else
-            op = polynomial
-            n = unpack_polynomial_size(tag) * 3 + 1
+            op = product
+            n = unpack_arithmetic_size(tag) * 2 + 1
         end
         if n > length - d.state
             f = Fragment(junk, read(d, length - d.state + 1))
@@ -300,13 +307,13 @@ function evaluate_kernel{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, avai
     end
 end
 
-function evaluate_polynomial{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available)
-    coeffs = unpack_polynomial(f, available)
+function evaluate_arithmetic{N}(f::Fragment, p::Position{N}, d::Array{Int8, 3}, available, transform)
+    coeffs = unpack_addition(f, available)
     my_acc = zeros(Float32, N, N)
-    for (input, power, scale) in coeffs
+    for (input, scale, change) in coeffs
         @forall i j N begin
             value = lookup(i, j, 0, 0, d, input, 0.0, p)
-            my_acc[i, j] += scale * value^power
+            my_acc[i, j] += scale * (change ? transform(value) : value)
         end
     end
     @forall i j N begin
@@ -317,8 +324,10 @@ end
 function evaluate(f::Fragment, p::Position, d::Array{Int8, 3}, available, transform)
     if f.operation == kernel
         evaluate_kernel(f, p, d, available, transform)
-    elseif f.operation == polynomial
-        evaluate_polynomial(f, p, d, available)
+    elseif f.operation == addition
+        evaluate_arithmetic(f, p, d, available, x -> sin(pi * x / 128))
+    elseif f.operation == product
+        evaluate_arithmetic(f, p, d, available, x -> 1/x)
     elseif available > 0
         # copy previous data on no-op so that final data (used as
         # output) is always valid
@@ -344,8 +353,8 @@ function evaluate{N}(e::Expression, p::Position{N})
     my_acc
 end
 
-function evaluate(data::Array{UInt8, 1}, p::Position)
-    evaluate(Expression(data), p)
+function evaluate(e::Array{UInt8, 1}, p::Position)
+    evaluate(Expression(e), p)
 end
 
 
@@ -361,3 +370,8 @@ end
 # by the largest numbers.  so instead, we just pick off the largest
 # scoring locations (and then exclude invalid moves etc).
 
+function moves{N}(e::Array{UInt8, 1}, p::Position{N})
+    logp = evaluate(e, p)
+    indexed = reshape([(logp[i, j], (i, j)) for i in 1:N, j in 1:N], N*N)
+    map(x -> x[2], sort(shuffle(filter(x -> x[1] > 0, indexed)), by=x -> x[1]))
+end

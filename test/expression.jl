@@ -5,17 +5,20 @@ for i in 1:10
     @test GoCL.pack_expression(GoCL.unpack_expression(e)) == e
     d = evaluate(e, p)
     compare(fix(d), "expression/random-$i.txt")
+    compare(moves(e, p), "expression/moves-$i.txt")
 end
 
-f = GoCL.pack_polynomial((1, 2, 3), (2, 3, 4))
-@test GoCL.pack_polynomial(GoCL.unpack_polynomial(f, 999)...) == f
+f = GoCL.pack_product((1, 2, false), (3, 4, true))
+@test GoCL.pack_product(GoCL.unpack_product(f, 999)...) == f
+f = GoCL.pack_addition((1, 2, false), (3, 4, true))
+@test GoCL.pack_addition(GoCL.unpack_addition(f, 999)...) == f
 
 p = random_position(1, 9, 20)
 for i in 1:GoCL.given
     e = GoCL.Expression()
-    push!(e, GoCL.pack_polynomial((i, 1, 1)))
+    push!(e, GoCL.pack_addition((i, 1, false)))
     d = fix(evaluate(e, p))
-    compare(d, "expression/given-poly-$i.txt")
+    compare(d, "expression/given-addition-$i.txt")
 end
 
 k = GoCL.pack_kernel(1, 2, (1, 2), [1 2; 3 4; 5 6])

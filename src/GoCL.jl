@@ -2,7 +2,7 @@
 module GoCL
 
 export fix, black, empty, white, other, point, Position, IllegalMove, move!,
-       evaluate, random_expression
+       evaluate, random_expression, moves
 
 using AutoHashEquals
 using StatefulIterators
