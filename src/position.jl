@@ -276,38 +276,22 @@ function merge_group!{N}(g::Groups{N}, newgroup, x, y)
     end
 end
 
-"""check whether the group at (x, y) is dead.  if so, remove it from
-Groups.index, sets Flood.distance to zero (these are later replaced in
-flood_dead_group!) and Space.index to the next available value
-(patched up in fix_space!)."""
-function check_and_delete_group!{N}(p::Position{N}, t, x, y)
-    alive = zeros(Bool, N, N)
-    # the group we want to check
-    group = p.groups.index[x, y]
-    if ! @forall_fold i j N (a,b) -> (a|b) false alive begin 
-        if p.groups.index[i, j] == group
-            @forneighbours i j N ii jj begin
-                # if a neighbour is empty, return that via the fold
-                if point(p.board, ii, jj) == empty
-                    alive[i, j] = true
-                end
-            end
-        end
-    end
-        # if not alive
-        space = k_lowest_unused(1, p.space.index, N)[1]
-        p.score.colour[t].prisoners = p.score.colour[t].prisoners + p.groups.size[group]
-        p.groups.size[group] = 0
-        @forall i j N begin
-            if p.groups.index[i, j] == group
-                # remove stone
-                move!(p.board, empty, i, j)
-                # erase group index
-                p.groups.index[i, j] = 0
-                p.space.index[i, j] = space
-                # set flood to special value (see flood_dead_group!)
-                p.flood.distance[i, j] = 0
-            end
+"""delete group g: remove it from Groups.index, sets Flood.distance to
+zero (these are later replaced in flood_dead_group!) and Space.index
+to the next available value (patched up in fix_space!)."""
+function delete_group!{N}(p::Position{N}, t, g)
+    space = k_lowest_unused(1, p.space.index, N)[1]
+    p.score.colour[t].prisoners = p.score.colour[t].prisoners + p.groups.size[g]
+    p.groups.size[g] = 0
+    @forall i j N begin
+        if p.groups.index[i, j] == g
+            # remove stone
+            move!(p.board, empty, i, j)
+            # erase group index
+            p.groups.index[i, j] = 0
+            p.space.index[i, j] = space
+            # set flood to special value (see flood_dead_group!)
+            p.flood.distance[i, j] = 0
         end
     end
 end
@@ -559,7 +543,12 @@ function move!{N}(p::Position{N}, t::Point, x, y)
         if tt == t
             merge_group!(p.groups, newgroup, xx, yy)
         elseif tt == other(t)
-            check_and_delete_group!(p, t, xx, yy)
+            g = p.groups.index[xx, yy]
+            # if it had a single life, and we just filled a space next
+            # door, then it must have died
+            if p.groups.lives[g] == 1
+                delete_group!(p, t, g)
+            end
         end
     end
     flood_dead_group!(p.flood, p.board, t)
@@ -570,3 +559,15 @@ function move!{N}(p::Position{N}, t::Point, x, y)
     p   # support call with new instance
 end
 
+
+# --- query state
+
+
+# TODO - really needs move history here
+function valid(p, t, x, y)
+    if point(p, x, y) != empty
+        return false
+    end
+    if p.space.index[x, y]
+    end
+end
