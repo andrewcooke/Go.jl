@@ -23,7 +23,8 @@ end
 function pick_competitors(n)
     # surprise() below assumes these are ordered
     b = rand(2:n)
-    rand(1:b-1), b
+    # biased to top, with one always in surviving half
+    rand(1:min(b-1, Int(survival * n))), b
 end
 
 
