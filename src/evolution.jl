@@ -2,8 +2,8 @@
 const survival = 0.5
 
 function evolve(population, nplays, nrounds, board_size, limit, path)
-    stats = reset_stats()
     for i in 1:nrounds
+        stats = reset_stats()
         for j in 1:nplays
             a, b = pick_competitors(length(population))
             # seed below counts from 1 and can be reproduced from the log
@@ -21,9 +21,9 @@ function evolve(population, nplays, nrounds, board_size, limit, path)
 end
 
 function pick_competitors(n)
-    m = Int(survival * n)
-    a = rand(1:m)
-    a, rand(a+1:n)
+    # surprise() below assumes these are ordered
+    b = rand(2:n)
+    rand(1:b-1), b
 end
 
 
@@ -52,7 +52,7 @@ function apply_result!(population, a, b, result)
         # this loses good individuals too quickly
 #        population[a], population[b] = population[b], population[a]
         a, b = sort([a, b])
-        population[a+1:end] = population[a:end-1]
+        population[a+1:b] = population[a:b-1]
         population[a] = population[b]
     end
 end
@@ -157,9 +157,9 @@ end
 function build_ops(length, temp)
     ops = Tuple{Number, Function}[
               (10, x -> random_bits(temp)(random_single(x))),
-              (10, x -> random_bytes(temp)(random_single(x)))]
+              (10, x -> merge(biased_pair(x)...))]
     if temp > 0.25
-        push!(ops, (10, x -> merge(biased_pair(x)...)))
+        push!(ops, (10, x -> random_bytes(temp)(random_single(x))))
     end
     if temp > 0.5
         push!(ops, (10, x -> merge_with_rotate(biased_pair(x)...)))
@@ -170,7 +170,7 @@ end
 function update_population!(population, stats, board_size)
     n, sum = stats
     # temperature varies roughly from 1 (hottest) to 0 (coldest)
-    temp = max(0, min(1, 1 - (2 * sum / n) / board_size^2))
+    temp = n == 0 ? 1 : max(0.01, min(1, 1 - (2 * sum / n) / board_size^2))
     @printf("temp %4.3f\n", temp)
     ops = build_ops(length(population[1]), temp)
     n = length(population)
