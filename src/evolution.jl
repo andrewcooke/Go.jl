@@ -14,7 +14,7 @@ function evolve(population, nplays, nrounds, board_size, limit, path)
         end
         dump(path, population)
         if i != nrounds
-            update_population!(population, stats, board_size)
+            population = update_population(population, stats, board_size)
         end
     end
     population
@@ -99,20 +99,22 @@ biased_single(population) = biased_pair(population)[2]
 
 random_single(population) = rand(population)
 
-function rotate(data::Vector)
-    n = rand(lheader+2:length(data))
-    print("rotate $(n-lheader+1) + ")
-    vcat(data[1:lheader], data[n:end], data[lheader+1:n-1])
+function rotate(a::Vector)
+    n = rand(lheader+2:length(a))
+    c = vcat(a[1:lheader], a[n:end], a[lheader+1:n-1])
+    print("rotate $(n-lheader+1) $(name(a)) => $(name(c)) + ")
+    c
 end
 
 function merge(a::Vector, b::Vector)
     a, b = shuffle(Vector[a, b])
-    c, i, j = a, 0, 0
-    while c in (a, b)
-        i, j = sort([distinct_indices(length(a); start=lheader+1)...])
+    c, i, j, attempts = a, 0, 0, 0
+    while c in (a, b) && attempts < 10
+        i, j = sort([distinct_indices(length(a); start=lheader)...])
         c = vcat(a[1:i], b[i+1:j], a[j+1:end])
+        attempts += 1
     end
-    println("merge $(j-i)")
+    println("merge $(j-i) $(name(a)), $(name(b)) => $(name(c))")
     c
 end
 
@@ -132,7 +134,7 @@ function random_bytes(fraction)
                 end
             end
         end
-        println("$(count) random bytes")
+        println("$(count) random bytes $(name(a)) => $(name(b))")
         b
     end
 end
@@ -148,7 +150,7 @@ function random_bits(fraction)
                 end
             end
         end
-        println("$(count) random bits")
+        println("$(count) random bits $(name(a)) => $(name(b))")
         b
     end
 end
@@ -179,19 +181,23 @@ function build_ops(length, temp)
     ops
 end
 
-function update_population!(population, stats, board_size)
-    n, sum = stats
+function update_population(prev_pop, stats, board_size)
+    t, sum = stats
     # temperature varies roughly from 1 (hottest) to 0 (coldest)
-    temp = n == 0 ? 1 : max(0, min(1, 1 - (2 * sum / n) / board_size^2))
+    temp = t == 0 ? 1 : max(0, min(1, 1 - (2 * sum / t) / board_size^2))
     @printf("temp %4.3f\n", temp)
-    ops = build_ops(length(population[1]), temp)
-    n = length(population)
+    ops = build_ops(length(prev_pop[1]), temp)
+    n = length(prev_pop)
     m = Int(survival * n)
-    survivors = population[1:m]
-    for i in m+1:n
-        population[i] = weighted_rand(ops)(survivors)
+    next_pop = Vector{UInt8}[]
+    while length(next_pop) < m && length(prev_pop) > 1
+        push!(next_pop, prev_pop[1])
+        prev_pop = prev_pop[2:end]
     end
-    population
+    while length(next_pop) < n
+        push!(next_pop, weighted_rand(ops)(next_pop))
+    end
+    next_pop
 end
 
 
