@@ -3,8 +3,6 @@ using GoCL
 using Base.Test
 
 
-exists(path) = stat(path).inode != 0
-
 function random_position(seed, board_size, n_moves)
     srand(seed)
     p = Position{board_size}()
@@ -35,6 +33,10 @@ function random_expression(n)
     e
 end
 
+function random_population(n, m)
+    [random_expression(n) for i in 1:m]
+end
+
 function compare(path, objs...)
     print(path)
     s = join([sprint(print, x) for x in objs], "\n") * "\n"
@@ -50,3 +52,4 @@ end
 
 include("position.jl")
 include("expression.jl")
+include("evolution.jl")

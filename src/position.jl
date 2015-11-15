@@ -10,17 +10,6 @@
 #   fill distances) is included
 
 
-# --- utilities
-
-
-"""this package assumes [x,y] indexing, with x varying fastest and
-origin bottom left.  this is not how julia displays matrices (not at
-all), so things can be confusing if you use "print" on raw structures.
-this function converts for display."""
-fix{T}(x::Array{T, 2}) = x'[size(x)[1]:-1:1,:]
-
-
-
 # --- data structures
 
 
@@ -98,11 +87,12 @@ end
 
 @auto_hash_equals type Score
     total::Int
+    moves::Int
     owned::Float32
     stones::Float32
     colour::Dict{Point, Details}
-    Score() = new(0, 0, 0, Dict{Point, Details}(black=>Details(), white=>Details()))
-    Score(s::Score) = new(s.total, s.owned, s.stones, [x=>s.colour[x] for x in (black, white)])
+    Score() = new(0, 0, 0, 0, Dict{Point, Details}(black=>Details(), white=>Details()))
+    Score(s::Score) = new(s.total, s.moves, s.owned, s.stones, [x=>s.colour[x] for x in (black, white)])
 end
 
 """a single position (implicitly, in a search tree).  combines Board,
@@ -485,6 +475,7 @@ function score!{N}(x::Score, s::Space{N})
     # two measures of progress
     x.stones = count(x -> x == 0, s.border)
     x.owned = Float32(count(x -> 0 < x < 3, s.border) / (N^2 - x.stones))
+    x.moves += 1
 end
 
 type IllegalMove <: Exception end

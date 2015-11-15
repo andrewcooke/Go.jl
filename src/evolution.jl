@@ -1,29 +1,30 @@
 
-function distinct_pair(range)
-    i = rand(range)
-    j = i
-    while i == j
-        j = rand(range)
-    end
-    i, j
-end
+const survival = 0.5
 
-
-function evolve(population, nplays, nrounds)
+function evolve(population, nplays, nrounds, board_size, limit, path)
     stats = reset_stats()
     for i in 1:nrounds
         for j in 1:nplays
-            a, b = pick_pair(population)
-            result = play(population, a, b)
+            a, b = pick_competitors(length(population))
+            # seed below counts from 1 and can be reproduced from the log
+            result = play_direct(population[a], population[b], board_size, limit; seed=j+(i-1)*nplays)
+            display_result(i, nrounds, j, nplays, population, a, b, result)
             apply_result!(population, a, b, result)
             stats = update_stats(stats, result)
         end
-        update_population!(population, stats)
+        dump(path, population)
+        if i != nrounds
+            update_population!(population, stats)
+        end
     end
     population
 end
 
-pick_pair(population) = distinct_pair(1:length(population))
+function pick_competitors(n)
+    m = Int(survival * n)
+    a = rand(1:m)
+    a, rand(a+1:n)
+end
 
 
 name(data) = sha1(data)[1:8]
@@ -34,22 +35,20 @@ function surprise(a, b, result)
     # so if a-b is negative then a was ranked better.
     # and if score is positive then that was confirmed.
     # so a shock result is when product is positive
-    result.details.score * (a-b) > 0
+    result.score.total * (a-b) > 0
 end
 
-function display_result(a, b, result, s)
-    print(s ? "!" : " ")
-    a, b = result.score.total < 0 ? b, a : a, b
-    print(name(a), " ")
-    print(result.score.total == 0 ? "drew" : "beat")
-    print(" ", name(b), "  ")
-    @printf("%3.2f space %d stones\n", result.score.owned, result.score.stones)
+function display_result(i, n, j, m, population, a, b, result)
+    @printf("%3d/%d %3d/%d %s", i, n, j, m, surprise(a, b, result) ? "!" : " ")
+    a, b = result.score.total < 0 ? (b, a) : (a, b)
+    @printf(" %s:%-3d ", name(population[a]), a)
+    print(result.score.total == 0 ? "dr" : "bt")
+    @printf(" %s:%-3d ", name(population[b]), b)
+    @printf("%2d sc  %3d mv  %4.2f sp  %2d st\n", abs(result.score.total), result.score.moves, result.score.owned, result.score.stones)
 end
 
 function apply_result!(population, a, b, result)
-    s = surprise(a, b, result)
-    display_result(a, b, result, s)
-    if s
+    if surprise(a, b, result)
         population[a], population[b] = population[b], population[a]
     end
 end
@@ -61,14 +60,33 @@ reset_stats() = 0, 0.0
 
 function update_stats(stats, result)
     n, sum = stats
-    n+1, sum+result.score.owned
+    # ignore games with one stone since i has an artificially high owned
+    if result.score.stones > 1
+        n+1, sum+result.score.owned
+    else
+        n, sum
+    end
 end
 
+
+function distinct_indices(n; start=1)
+    i = rand(start:n)
+    j = i
+    while i == j
+        j = rand(start:n)
+    end
+    i, j
+end
 
 function biased_pair(population)
     a = rand(2:length(population))
     b = rand(1:(a-1))
-    a, b
+    population[a], population[b]
+end
+
+function distinct_pair(population)
+    a, b = distinct_indices(length(population))
+    population[a], population[b]
 end
 
 biased_single(population) = biased_pair(population)[2]
@@ -76,47 +94,53 @@ biased_single(population) = biased_pair(population)[2]
 random_single(population) = rand(population)
 
 function rotate(data::Vector)
-    n = rand(1:length(data))
-    vcat(data[n:end], data[1:n-1])
+    print("rotate+")
+    n = rand(lheader+1:length(data))
+    vcat(data[1:lheader], data[n:end], data[lheader+1:n-1])
 end
 
 function merge(a::Vector, b::Vector)
-    a, b = shuffle([a, b])
-    i, j = sort(distint_rand(1:length(a)))
-    vcat(a[1:i], b[i+i:j], a[j+1:end])
+    println("merge")
+    a, b = shuffle(Vector[a, b])
+    i, j = sort([distinct_indices(length(a); start=lheader+1)...])
+    vcat(a[1:i], b[i+1:j], a[j+1:end])
 end
 
 function merge_with_rotate(a::Vector, b::Vector)
-    a, b = shuffle([a, b])
+    a, b = shuffle(Vector[a, b])
     merge(a, rotate(b))
 end
 
 function random_bytes(fraction)
     function change(a::Vector{UInt8})
-        for i in 1:length(a)
-            if rand(1.0) < fraction
-                a[i] = rand(UInt8)
+        println("random bytes")
+        b = copy(a)
+        for i in lheader+1:length(b)
+            if rand(Float64) < fraction
+                b[i] = rand(UInt8)
             end
         end
-        a
+        b
     end
 end
 
 function random_bits(fraction)
     function change(a::Vector{UInt8})
-        for i in 1:length(a)
-            if rand(1.0) < fraction
-                a[i] = a[i] $ (0x01 << rand(0:7))
+        println("random bits")
+        b = copy(a)
+        for i in lheader+1:length(b)
+            if rand(Float64) < fraction
+                b[i] = b[i] $ (0x01 << rand(0:7))
             end
         end
-        a
+        b
     end
 end
 
 function weighted_rand(ops)
     total = sum([op[1] for op in ops])
-    limit = rand(0:Float(total))
-    acc, i = 0.0, 1
+    limit = rand(Float64) * total
+    acc, i = ops[1][1], 1
     while acc < limit
         acc += ops[i][1]
         i += 1
@@ -124,30 +148,45 @@ function weighted_rand(ops)
     ops[i][2]
 end
 
-function build_ops(population, stats)
-    n, sum = stats
-    # temperature varies from 1 (hottest) to 0 (coldest)
-    temp = (1 - (sum / n))
-    l = length(population[1])
+function build_ops(length, temp)
     ops = Tuple{Number, Function}[
-              10 => x -> random_bits(100 * temp / l)(random_single(x)),
-              10 => x -> random_bytes(100 * temp / l)(random_single(x))]
+              (10, x -> random_bits(100 * temp / length)(random_single(x))),
+              (10, x -> random_bytes(100 * temp / length)(random_single(x)))]
     if temp > 0.25
-        push!(ops, 10 => x -> merge(biased_pair(x)...))
+        push!(ops, (10, x -> merge(biased_pair(x)...)))
     end
     if temp > 0.5
-        push!(ops, 10 => x -> merge_with_rotate(biased_pair(x)...))
+        push!(ops, (10, x -> merge_with_rotate(biased_pair(x)...)))
     end
     ops
 end
 
 function update_population!(population, stats)
-    ops = build_ops(population, stats)
+    n, sum = stats
+    # temperature varies from 1 (hottest) to 0 (coldest)
+    temp = (1 - (sum / n))
+    @printf("temp %4.3f\n", temp)
+    ops = build_ops(length(population[1]), temp)
     n = length(population)
-    m = Int(n/2)
+    m = Int(survival * n)
     survivors = population[1:m]
     for i in m+1:n
         population[i] = weighted_rand(ops)(survivors)
     end
     population
+end
+
+
+function dump(path, population)
+    if exists(path)
+        backup = "$(path)-old"
+        exists(backup) && rm(backup)
+        mv(path, backup)
+    end
+    open(path, "w") do io
+        for data in population
+            print(io, bytes2hex(data))
+            print(io, "\n")
+        end
+    end
 end

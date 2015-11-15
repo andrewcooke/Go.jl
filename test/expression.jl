@@ -5,7 +5,8 @@ for i in 1:10
     @test GoCL.pack_expression(GoCL.unpack_expression(e)) == e
     d = evaluate(e, p, white)
     compare("expression/random-$i.txt", fix(d))
-    compare("expression/moves-$i.txt", p, moves(e, p, black))
+    compare("expression/moves-$i.txt", 
+            p, moves(e, p, black, MersenneTwister(1)))
 end
 
 f = GoCL.pack_product((1, 2, false), (3, 4, true))
@@ -45,7 +46,7 @@ move!(p, black, 5, 5)
 for (i, (x,y)) in enumerate(((4,4),(4,5),(5,6),(4,6),(6,6),(6,5),(6,4),(5,4)))
     move!(p, white, x, y)
 end
-m = moves(e, p, black)
-@test !((5,5) in m)
-compare("expression/move-eye.txt", p, moves(e, p, black))
 
+m = moves(e, p, black, MersenneTwister(1))
+@test !((5,5) in m)
+compare("expression/move-eye.txt", p, m)

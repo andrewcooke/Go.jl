@@ -79,6 +79,7 @@ f2b(f::Number) = Int8(min(127, max(-128, round(f * 16))))
 
 const given = 12  # indices that are constant or taken from position
 const header = map(UInt8, collect("goxp"))
+const lheader = 7   # 4 chars, 1 version, 2 length
 
 @enum Operation kernel product addition junk
 
@@ -193,8 +194,8 @@ function unpack_expression(data::Vector{UInt8})
             op = product
             n = unpack_arithmetic_size(tag) * 2 + 1
         end
-        if n > length - d.state
-            f = Fragment(junk, read(d, length - d.state + 1))
+        if n > available(d)
+            f = Fragment(junk, read(d, available(d)))
         else
             f = Fragment(op, read(d, n))
         end
@@ -372,10 +373,10 @@ end
 # by the largest numbers.  so instead, we just pick off the largest
 # scoring locations (and then exclude invalid moves etc).
 
-function moves{N}(e::Array{UInt8, 1}, p::Position{N}, t::Point)
+function moves{N}(e::Array{UInt8, 1}, p::Position{N}, t::Point, rng)
     logp = evaluate(e, p, t)
     indexed = reshape([(logp[i, j], (i, j)) for i in 1:N, j in 1:N], N*N)
     positive = filter(x -> x[1] > 0, indexed)
     possible = filter(x -> valid(p, t, x[2]...), positive)
-    map(x -> x[2], sort(shuffle(possible), by=x -> x[1]))
+    map(x -> x[2], sort(shuffle(rng, possible), by=x -> x[1]))
 end
