@@ -158,10 +158,10 @@ end
 
 function build_ops(length, temp)
     ops = Tuple{Number, Function}[
-              (10, x -> random_bits(temp)(random_single(x))),
+              (10, x -> random_bits(temp/10)(random_single(x))),
               (10, x -> merge(biased_pair(x)...))]
     if temp > 0.25
-        push!(ops, (10, x -> random_bytes(temp)(random_single(x))))
+        push!(ops, (10, x -> random_bytes(temp/10)(random_single(x))))
     end
     if temp > 0.5
         push!(ops, (10, x -> merge_with_rotate(biased_pair(x)...)))
