@@ -280,7 +280,7 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N},
             Float32(p.score.total * Int(t))
         elseif input == 11
             # fraction of space that is 'owned'
-            p.score.owned
+            Float32(p.score.owned / (N*N - p.score.stones))
         elseif input == 12
             # fraction of board that is stones
             p.score.stones

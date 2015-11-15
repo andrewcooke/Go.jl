@@ -14,7 +14,7 @@ function evolve(population, nplays, nrounds, board_size, limit, path)
         end
         dump(path, population)
         if i != nrounds
-            update_population!(population, stats)
+            update_population!(population, stats, board_size)
         end
     end
     population
@@ -44,12 +44,16 @@ function display_result(i, n, j, m, population, a, b, result)
     @printf(" %s:%-3d ", name(population[a]), a)
     print(result.score.total == 0 ? "dr" : "bt")
     @printf(" %s:%-3d ", name(population[b]), b)
-    @printf("%2d sc  %3d mv  %4.2f sp  %2d st\n", abs(result.score.total), result.score.moves, result.score.owned, result.score.stones)
+    @printf("%2d sc  %3d mv  %2d sp  %2d st\n", abs(result.score.total), result.score.moves, result.score.owned, result.score.stones)
 end
 
 function apply_result!(population, a, b, result)
     if surprise(a, b, result)
-        population[a], population[b] = population[b], population[a]
+        # this loses good individuals too quickly
+#        population[a], population[b] = population[b], population[a]
+        a, b = sort([a, b])
+        population[a+1:end] = population[a:end-1]
+        population[a] = population[b]
     end
 end
 
@@ -94,15 +98,15 @@ biased_single(population) = biased_pair(population)[2]
 random_single(population) = rand(population)
 
 function rotate(data::Vector)
-    print("rotate+")
-    n = rand(lheader+1:length(data))
+    n = rand(lheader+2:length(data))
+    print("rotate $(n-lheader+1) + ")
     vcat(data[1:lheader], data[n:end], data[lheader+1:n-1])
 end
 
 function merge(a::Vector, b::Vector)
-    println("merge")
     a, b = shuffle(Vector[a, b])
     i, j = sort([distinct_indices(length(a); start=lheader+1)...])
+    println("merge $(j-i)")
     vcat(a[1:i], b[i+1:j], a[j+1:end])
 end
 
@@ -113,26 +117,28 @@ end
 
 function random_bytes(fraction)
     function change(a::Vector{UInt8})
-        println("random bytes")
-        b = copy(a)
+        b, count = copy(a), 0
         for i in lheader+1:length(b)
             if rand(Float64) < fraction
                 b[i] = rand(UInt8)
+                count += 1
             end
         end
+        println("$(count) random bytes")
         b
     end
 end
 
 function random_bits(fraction)
     function change(a::Vector{UInt8})
-        println("random bits")
-        b = copy(a)
+        b, count = copy(a), 0
         for i in lheader+1:length(b)
             if rand(Float64) < fraction
                 b[i] = b[i] $ (0x01 << rand(0:7))
+                count += 1
             end
         end
+        println("$(count) random bits")
         b
     end
 end
@@ -150,8 +156,8 @@ end
 
 function build_ops(length, temp)
     ops = Tuple{Number, Function}[
-              (10, x -> random_bits(100 * temp / length)(random_single(x))),
-              (10, x -> random_bytes(100 * temp / length)(random_single(x)))]
+              (10, x -> random_bits(temp)(random_single(x))),
+              (10, x -> random_bytes(temp)(random_single(x)))]
     if temp > 0.25
         push!(ops, (10, x -> merge(biased_pair(x)...)))
     end
@@ -161,10 +167,10 @@ function build_ops(length, temp)
     ops
 end
 
-function update_population!(population, stats)
+function update_population!(population, stats, board_size)
     n, sum = stats
-    # temperature varies from 1 (hottest) to 0 (coldest)
-    temp = (1 - (sum / n))
+    # temperature varies roughly from 1 (hottest) to 0 (coldest)
+    temp = max(0, min(1, 1 - (2 * sum / n) / board_size^2))
     @printf("temp %4.3f\n", temp)
     ops = build_ops(length(population[1]), temp)
     n = length(population)

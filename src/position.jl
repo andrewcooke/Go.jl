@@ -88,7 +88,7 @@ end
 @auto_hash_equals type Score
     total::Int
     moves::Int
-    owned::Float32
+    owned::Int
     stones::Float32
     colour::Dict{Point, Details}
     Score() = new(0, 0, 0, 0, Dict{Point, Details}(black=>Details(), white=>Details()))
@@ -474,7 +474,7 @@ function score!{N}(x::Score, s::Space{N})
     x.total = b.prisoners + b.spaces - (w.prisoners + w.spaces)
     # two measures of progress
     x.stones = count(x -> x == 0, s.border)
-    x.owned = Float32(count(x -> 0 < x < 3, s.border) / (N^2 - x.stones))
+    x.owned = b.spaces + w.spaces
     x.moves += 1
 end
 
