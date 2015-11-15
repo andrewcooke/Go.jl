@@ -52,8 +52,9 @@ function apply_result!(population, a, b, result)
         # this loses good individuals too quickly
 #        population[a], population[b] = population[b], population[a]
         a, b = sort([a, b])
+        tmp = population[b]
         population[a+1:b] = population[a:b-1]
-        population[a] = population[b]
+        population[a] = tmp
     end
 end
 
