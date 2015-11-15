@@ -107,9 +107,13 @@ end
 
 function merge(a::Vector, b::Vector)
     a, b = shuffle(Vector[a, b])
-    i, j = sort([distinct_indices(length(a); start=lheader+1)...])
+    c, i, j = a, 0, 0
+    while c in (a, b)
+        i, j = sort([distinct_indices(length(a); start=lheader+1)...])
+        c = vcat(a[1:i], b[i+1:j], a[j+1:end])
+    end
     println("merge $(j-i)")
-    vcat(a[1:i], b[i+1:j], a[j+1:end])
+    c
 end
 
 function merge_with_rotate(a::Vector, b::Vector)
@@ -163,7 +167,9 @@ end
 function build_ops(length, temp)
     ops = Tuple{Number, Function}[
               (10, x -> random_bits(temp/10)(random_single(x))),
-              (10, x -> merge(biased_pair(x)...))]
+              (10, x -> merge(biased_pair(x)...)),
+              (1, x -> merge_with_rotate(biased_pair(x)...)),
+              (1, x -> random_bytes(temp/10)(random_single(x)))]
     if temp > 0.25
         push!(ops, (10, x -> random_bytes(temp/10)(random_single(x))))
     end
