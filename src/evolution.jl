@@ -120,10 +120,12 @@ end
 function random_bytes(fraction)
     function change(a::Vector{UInt8})
         b, count = copy(a), 0
-        for i in lheader+1:length(b)
-            if rand(Float64) < fraction
-                b[i] = rand(UInt8)
-                count += 1
+        while b == a
+            for i in lheader+1:length(b)
+                if rand(Float64) < fraction
+                    b[i] = rand(UInt8)
+                    count += 1
+                end
             end
         end
         println("$(count) random bytes")
@@ -134,10 +136,12 @@ end
 function random_bits(fraction)
     function change(a::Vector{UInt8})
         b, count = copy(a), 0
-        for i in lheader+1:length(b)
-            if rand(Float64) < fraction
-                b[i] = b[i] $ (0x01 << rand(0:7))
-                count += 1
+        while b == a
+            for i in lheader+1:length(b)
+                if rand(Float64) < fraction
+                    b[i] = b[i] $ (0x01 << rand(0:7))
+                    count += 1
+                end
             end
         end
         println("$(count) random bits")
@@ -172,7 +176,7 @@ end
 function update_population!(population, stats, board_size)
     n, sum = stats
     # temperature varies roughly from 1 (hottest) to 0 (coldest)
-    temp = n == 0 ? 1 : max(0.01, min(1, 1 - (2 * sum / n) / board_size^2))
+    temp = n == 0 ? 1 : max(0, min(1, 1 - (2 * sum / n) / board_size^2))
     @printf("temp %4.3f\n", temp)
     ops = build_ops(length(population[1]), temp)
     n = length(population)
