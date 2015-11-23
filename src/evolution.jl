@@ -12,6 +12,7 @@ function evolve(population, nplays, nrounds, path, algorithm)
             # seed below counts from 1 and can be reproduced from the log
             srand(algorithm, j+(i-1)*nplays)
             result = play(population[a], population[b], algorithm, null_display)
+#            result = play(population[a], population[b], algorithm, board_display)
             display_result(i, nrounds, j, nplays, population, a, b, result)
             apply_result!(population, a, b, result)
             stats = update_stats(stats, result)
@@ -31,8 +32,8 @@ function pick_competitors(n)
     rand(1:min(b-1, Int(survival * n))), b
 end
 
-
-name(data) = sha1(data)[1:16]
+const name_length = 16
+name(data) = sha1(data)[1:name_length]
 name(data, rank) = "$(name(data)) $(rank)"
 
 function surprise(a, b, result)
@@ -218,3 +219,15 @@ function dump(known, path, population)
         end
     end
 end
+
+function undump(path)
+    named = Dict{AbstractString, Vector{UInt8}}()
+    open(path, "r") do io
+        for line in eachline(io)
+            name, data = split(line, ":")
+            named[name] = hex2bytes(data[1:end-1])  # drop newline
+        end
+    end
+    named
+end
+

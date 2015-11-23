@@ -100,7 +100,7 @@ end
     Expression() = Expression(0x00)
 end
 
-function read_input(e::ArrayIterator{UInt8}, available)
+function read_input(e::StatefulIterator{Vector{UInt8},Int}, available)
     input = read(e, Int8)
     n = given + available
     # abs(-128) = -128 for Int8
@@ -113,7 +113,7 @@ function read_input(e::ArrayIterator{UInt8}, available)
 end
 
 function unpack_kernel(f::Fragment, available)
-    e = ArrayIterator(f.data)
+    e = StatefulIterator(f.data)
     nx, ny = unpack_kernel_size(read(e))
     input = read_input(e, available)
     edge = b2f(read(e, Int8))
@@ -132,7 +132,7 @@ function pack_kernel(input, edge, c, coeffs)
 end
 
 function unpack_arithmetic(f::Fragment, available)
-    e = ArrayIterator(f.data)
+    e = StatefulIterator(f.data)
     tag = read(e)
     n = unpack_arithmetic_size(tag)
     flags = ((tag >> 2) & 0x0f) << 1
@@ -177,7 +177,7 @@ function Base.push!(e::Expression, f::Fragment)
 end
 
 function unpack_expression(data::Vector{UInt8})
-    d = ArrayIterator(data)
+    d = StatefulIterator(data)
     @assert read(d, 4) == header
     e = Expression(read(d))
     length = read(d, UInt16)
@@ -380,3 +380,8 @@ function moves{N}(e::Array{UInt8, 1}, p::Position{N}, t::Point, rng)
     possible = filter(x -> valid(p, t, x[2]...), positive)
     map(x -> x[2], sort(shuffle(rng, possible), by=x -> x[1]))
 end
+
+
+# --- analysis
+
+
