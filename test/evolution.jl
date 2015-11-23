@@ -7,4 +7,5 @@ for i in 1:10
 end
 
 d = random_population(100, 20)
-evolve(d, 20, 1000, 9, 81, "dump.txt")
+#evolve(d, 20, 1000, "dump.txt", Direct(9, 81, MersenneTwister(1)))
+evolve(d, 20, 1, "evol-2.dump", Direct(9, 81, MersenneTwister(1)))

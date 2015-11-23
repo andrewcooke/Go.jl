@@ -1,20 +1,24 @@
 
 const survival = 0.5
 
-function evolve(population, nplays, nrounds, board_size, limit, path)
+function evolve(population, nplays, nrounds, path, algorithm)
+    known = Set{UInt64}()
+    exists(path) && rm(path)
+    dump(known, path, population)
     for i in 1:nrounds
         stats = reset_stats()
         for j in 1:nplays
             a, b = pick_competitors(length(population))
             # seed below counts from 1 and can be reproduced from the log
-            result = play_direct(population[a], population[b], board_size, limit; seed=j+(i-1)*nplays)
+            srand(algorithm, j+(i-1)*nplays)
+            result = play(population[a], population[b], algorithm, null_display)
             display_result(i, nrounds, j, nplays, population, a, b, result)
             apply_result!(population, a, b, result)
             stats = update_stats(stats, result)
         end
-        dump(path, population)
         if i != nrounds
             population = update_population(population, stats, board_size)
+            dump(known, path, population)
         end
     end
     population
@@ -28,7 +32,7 @@ function pick_competitors(n)
 end
 
 
-name(data) = sha1(data)[1:8]
+name(data) = sha1(data)[1:16]
 name(data, rank) = "$(name(data)) $(rank)"
 
 function surprise(a, b, result)
@@ -200,17 +204,17 @@ function update_population(prev_pop, stats, board_size)
     next_pop
 end
 
-
-function dump(path, population)
-    if exists(path)
-        backup = "$(path)-old"
-        exists(backup) && rm(backup)
-        mv(path, backup)
-    end
-    open(path, "w") do io
+function dump(known, path, population)
+    open(path, "a") do io
         for data in population
-            print(io, bytes2hex(data))
-            print(io, "\n")
+            n = name(data)
+            tag = reinterpret(UInt64, hex2bytes(n))[1]
+            if !(tag in known)
+                print(io, string(n, ":"))
+                print(io, bytes2hex(data))
+                print(io, "\n")
+                push!(known, tag)
+            end
         end
     end
 end
