@@ -50,3 +50,7 @@ end
 m = moves(e, p, black, MersenneTwister(1))
 @test !((5,5) in m)
 compare("expression/move-eye.txt", p, m)
+
+e = random_expression(100)
+dump_expression(e)
+"

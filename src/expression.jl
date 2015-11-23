@@ -384,4 +384,69 @@ end
 
 # --- analysis
 
+const lookup_dict = Dict{Int,ASCIIString}(1 => "zero",
+                                          2 => "one",
+                                          3 => "point",
+                                          4 => "group index",
+                                          5 => "group size",
+                                          6 => "group lives",
+                                          7 => "flood",
+                                          8 => "space owner",
+                                          9 => "same space",
+                                          10 => "score",
+                                          11 => "owned %",
+                                          12 => "stones %")
 
+function lookup_name(input)
+    if input > given
+        input - given
+    else
+        lookup_dict[input]
+    end
+end
+
+int(x) = typeof(x) <: Integer
+
+function dump_kernel(i, f)
+    input = lookup_name(unpack_kernel(f, i-1)[1])
+    println("$i kernel($input)")
+    filter(int, [input])
+end
+
+term2str(input, scale, change) = string("$(scale)*$(lookup_name(input))", change ? "!" : "")
+
+function dump_arithmetic(i, f, op)
+    terms = unpack_arithmetic(f, i-1)
+    expr = join(map(x -> term2str(x...), terms), " $op ")
+    println("$i $expr")
+    filter(int, map(x -> lookup_name(x[1]), terms))
+end
+
+function dump_fragment(i, f, used)
+    if f.operation == kernel
+        refs = dump_kernel(i, f)
+    elseif f.operation == addition
+        refs = dump_arithmetic(i, f, "+")
+    elseif f.operation == product
+        refs = dump_arithmetic(i, f, "*")
+    else
+        refs = Int[]
+    end
+    for ref in refs
+        push!(used, ref)
+    end
+end
+
+function dump_expression(e::Expression)
+    used = Set{Int}()
+    for (i, fragment) in reverse(collect(enumerate(e.fragment)))
+        if fragment.operation != junk
+            if length(used) == 0 || i in used
+                push!(used, i)
+                dump_fragment(i, fragment, used)
+            end
+        end
+    end
+end
+
+dump_expression(e::Vector{UInt8}) = dump_expression(unpack_expression(e))

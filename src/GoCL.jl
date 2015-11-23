@@ -4,7 +4,7 @@ module GoCL
 export fix, exists,
        black, empty, white, other, point, Position, IllegalMove, move!,
        evaluate, random_expression, moves,
-       evolve, Direct, undump, replay_direct
+       evolve, Direct, undump, replay_direct, dump_expression
 
 using AutoHashEquals
 using StatefulIterators
