@@ -1,5 +1,5 @@
 
-module GoCL
+module Go
 
 export fix, exists,
        black, empty, white, other, point, Position, IllegalMove, move!,

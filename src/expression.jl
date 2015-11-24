@@ -72,6 +72,17 @@
 # new fragments start every chunk (see below) bytes.  this allows changes
 # without 'breaking' all following fragments.
 
+# evaluation order
+
+# originally fragments were evaluated in the order they appeared in the
+# expression, with the final value being taken from the last expression.
+# but this evaluated unused expressions, to the evaluation was made lazy.
+# and then the ordering was reversed, so that the final value is taken
+# from the first fragment defined, and references are to later fragments.
+# this gives more persistence across merges, because early fragments 
+# are not affected by re-interpretatin of modified later fragments.
+
+
 
 # --- data structuring
 
@@ -182,7 +193,13 @@ function pack_product(coeffs...)
 end
 
 function Base.push!(e::Expression, f::Fragment)
-    push!(e.fragment, f)
+    # by appending junk to the previous padding we don't have to worry
+    # about junk during evaluation.
+    if f.operation == junk && length(e.fragment) > 0
+        append!(e.fragment[end].padding, f.data)
+    else
+        push!(e.fragment, f)
+    end
     e.length += length(f.data) + length(f.padding)
 end
 
@@ -379,7 +396,6 @@ function evaluate(e::Array{UInt8, 1}, p::Position, t::Point)
 end
 
 
-
 # --- lazy evaluation
 
 
@@ -529,7 +545,6 @@ end
 function evaluate_lazy(e::Array{UInt8, 1}, p::Position, t::Point)
     evaluate_lazy(Expression(e), p, t)
 end
-
 
 
 # --- move extraction

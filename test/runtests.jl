@@ -1,5 +1,5 @@
 
-using GoCL
+using Go
 using Base.Test
 
 

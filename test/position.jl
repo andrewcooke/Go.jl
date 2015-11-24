@@ -3,17 +3,17 @@ regen = false
 
 a = ones(UInt32, 19, 19)
 b = zeros(UInt32, 19, 19)
-@GoCL.forall i j 19 begin
+@Go.forall i j 19 begin
     b[i, j] = 2 * a[i, j]
 end
 @test b == 2a
-c = @GoCL.forall_fold i j 19 (+) 0 b begin
+c = @Go.forall_fold i j 19 (+) 0 b begin
     b[i, j] = 3 * a[i, j]
 end
 @test c == 3 * 19 * 19
 
 
-b = GoCL.Board{19}()
+b = Go.Board{19}()
 @test length(b.row) == 19
 @test point(b, 1, 1) == empty
 @test point(b, 19, 19) == empty

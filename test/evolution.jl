@@ -1,9 +1,9 @@
 
-ops = GoCL.build_ops(100, 1)
+ops = Go.build_ops(100, 1)
 for i in 1:10
     a, b = random_expression(100), random_expression(100)
-    c = GoCL.weighted_rand(ops)(Vector[a, b])
-    GoCL.unpack_expression(c)
+    c = Go.weighted_rand(ops)(Vector[a, b])
+    Go.unpack_expression(c)
 end
 
 d = random_population(200, 50)
