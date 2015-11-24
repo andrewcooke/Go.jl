@@ -1,7 +1,7 @@
 
 const survival = 0.5
 
-function evolve(population, nplays, nrounds, path, algorithm)
+function evolve(population, board_size, max_moves, nplays, nrounds, path, algorithm)
     known = Set{UInt64}()
     exists(path) && rm(path)
     dump(known, path, population)
@@ -11,16 +11,21 @@ function evolve(population, nplays, nrounds, path, algorithm)
             a, b = pick_competitors(length(population))
             # seed below counts from 1 and can be reproduced from the log
             srand(algorithm, j+(i-1)*nplays)
-            result = play(population[a], population[b], algorithm, null_display)
+            result = play(population[a], population[b], board_size, max_moves,
+                          algorithm, null_display)
 #            result = play(population[a], population[b], algorithm, board_display)
             display_result(i, nrounds, j, nplays, population, a, b, result)
             apply_result!(population, a, b, result)
             stats = update_stats(stats, result)
         end
+        println("top is $(name(population[1])):")
+        dump_expression(population[1])
+        println("")
         if i != nrounds
             population = update_population(population, stats, board_size)
             dump(known, path, population)
         end
+        println("")
     end
     population
 end

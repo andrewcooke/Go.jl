@@ -6,6 +6,5 @@ for i in 1:10
     GoCL.unpack_expression(c)
 end
 
-d = random_population(100, 20)
-#evolve(d, 20, 1000, "dump.txt", Direct(9, 81, MersenneTwister(1)))
-evolve(d, 20, 1, "evol-2.dump", Direct(9, 81, MersenneTwister(1)))
+d = random_population(200, 50)
+evolve(d, 9, 54, 25, 10000, "../evol-2.dump", Direct(MersenneTwister(1)))

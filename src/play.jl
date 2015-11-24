@@ -2,8 +2,6 @@
 abstract Algorithm
 
 type Direct <: Algorithm
-    board_size::Int
-    max_moves::Int
     rng::AbstractRNG
 end
 
@@ -12,9 +10,9 @@ function srand(d::Direct, n)
     d.rng = MersenneTwister(n)
 end
 
-function play(a::Vector{UInt8}, b::Vector{UInt8}, d::Direct, display)
-    passed, t, p = 0, black, Position{d.board_size}()
-    while passed < 2 && p.score.moves < d.max_moves
+function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, d::Direct, display)
+    passed, t, p = 0, black, Position{board_size}()
+    while passed < 2 && p.score.moves < max_moves
         m = moves(a, p, t, d.rng)
         if length(m) == 0
             passed += 1

@@ -74,8 +74,9 @@
 unpack_kernel_size(n::UInt8) = ((n & 0x70) >> 4) + 1, (n & 0x0f) + 1
 unpack_arithmetic_size(n::UInt8) = (n & 0x03) + 1
 
-b2f(b::Int8) = Float32(reinterpret(Int8, b) / 16)
-f2b(f::Number) = Int8(min(127, max(-128, round(f * 16))))
+const scale = 64.0
+b2f(b::Int8) = Float32(reinterpret(Int8, b) / scale)
+f2b(f::Number) = Int8(min(127, max(-128, round(f * scale))))
 
 const given = 12  # indices that are constant or taken from position
 const header = map(UInt8, collect("goxp"))
@@ -235,7 +236,7 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N},
                 # kernel: 1 if same group as 'centre', -1 if not
                 Float32(p.groups.index[x, y] == p.groups.index[ox, oy] ? 1 : -1)
             else
-                # polynomial: can't think of anything better here
+                # arithmetic: can't think of anything better here
                 Float32(p.groups.index[x, y])
             end
         elseif input == 5
