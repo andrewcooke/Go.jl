@@ -364,10 +364,6 @@ function evaluate(f::Fragment, p::Position, t::Point, d::Array{Int8, 3}, availab
         evaluate_arithmetic(f, p, t, d, available, x -> sin(pi * x / 128))
     elseif f.operation == product
         evaluate_arithmetic(f, p, t, d, available, x -> 1/x)
-    elseif available > 0
-        # copy previous data on no-op so that final data (used as
-        # output) is always valid
-        d[:,:,available+1] = d[:,:,available]
     end
 end
 
@@ -380,8 +376,10 @@ function evaluate{N}(e::Expression, p::Position{N}, t::Point)
     for transform in ([1 0; 0 1], [0 1; -1 0], [-1 0; 0 -1], [0 -1; 1 0],
                       [1 0; 0 -1], [0 1; 1 0], [-1 0; 0 1], [0 -1; -1 0])
         output_data = zeros(Int8, N, N, n)
-        for i in 1:n
-            evaluate(e.fragment[i], p, t, output_data, i-1, transform)
+        # evaluate backwards, but store output_data forwards so indices
+        # still work correctly.
+        for i in n:-1:1
+            evaluate(e.fragment[i], p, t, output_data, n-i, transform)
         end
         # output is final frame (most complex)
         my_acc += map(b2f, output_data[:,:,n])
@@ -399,12 +397,14 @@ end
 # --- lazy evaluation
 
 
-function lookup_lazy{N}(f, index, x, y, ox, oy, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t::Point, transform)
+function lookup_lazy{N}(f, x, y, ox, oy, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t::Point, transform)
     if 1 <= x <= N && 1 <= y <= N
         if input > given
             # yay, simple lookup
             i = input-given
-            e[i] || evaluate_lazy(f, i, p, t, e, d, transform)
+            # not so simple inference of fragment that corresponds to
+            # output_data
+            e[i] || evaluate_lazy(f, length(f)-i+1, p, t, e, d, transform)
             b2f(d[x, y, i])
         elseif input == 1
             # constant 0
@@ -486,12 +486,12 @@ function evaluate_lazy_kernel{N}(f::Vector{Fragment}, index, p::Position{N}, t::
                 # the best way to understand this is to draw a picture.
                 # it's basically a coord change from one frame (coeffs)
                 # to the other (data).
-                my_acc[i,j] += coeffs[di, dj] * lookup_lazy(f, index, i+ddi, j+ddj, i, j, e, d, input, edge, p, t, transform)
+                my_acc[i,j] += coeffs[di, dj] * lookup_lazy(f, i+ddi, j+ddj, i, j, e, d, input, edge, p, t, transform)
             end
         end
-        d[i, j, index] = f2b(my_acc[i, j] / sqrt(nx*ny))
+        d[i, j, n-index+1] = f2b(my_acc[i, j] / sqrt(nx*ny))
     end
-    e[index] = true
+    e[n-index+1] = true
 end
 
 function evaluate_lazy_arithmetic{N}(f::Vector{Fragment}, index, p::Position{N}, t::Point, e, d::Array{Int8, 3}, g, transform)
@@ -499,14 +499,14 @@ function evaluate_lazy_arithmetic{N}(f::Vector{Fragment}, index, p::Position{N},
     my_acc = zeros(Float32, N, N)
     for (input, scale, change) in coeffs
         @forall i j N begin
-            value = lookup_lazy(f, index, i, j, 0, 0, e, d, input, 0.0, p, t, transform)
+            value = lookup_lazy(f, i, j, 0, 0, e, d, input, 0.0, p, t, transform)
             my_acc[i, j] += scale * (change ? g(value) : value)
         end
     end
     @forall i j N begin
-        d[i, j, index] = f2b(my_acc[i, j] / sqrt(length(coeffs)))
+        d[i, j, n-index+1] = f2b(my_acc[i, j] / sqrt(length(coeffs)))
     end
-    e[index] = true
+    e[n-index+1] = true
 end
 
 function evaluate_lazy(f::Vector{Fragment}, i, p::Position, t::Point, e, d::Array{Int8, 3}, transform)
@@ -517,11 +517,6 @@ function evaluate_lazy(f::Vector{Fragment}, i, p::Position, t::Point, e, d::Arra
         evaluate_lazy_arithmetic(f, i, p, t, e, d, x -> sin(pi * x / 128), transform)
     elseif fragment.operation == product
         evaluate_lazy_arithmetic(f, i, p, t, e, d, x -> 1/x, transform)
-    elseif i > 1
-        # copy previous data on no-op so that final data (used as
-        # output) is always valid
-        e[i-1] || evaluate_lazy(f, i-1, p, t, e, d, transform)
-        d[:,:,i] = d[:,:,i-1]
     end
 end
 
@@ -535,7 +530,7 @@ function evaluate_lazy{N}(e::Expression, p::Position{N}, t::Point)
                       [1 0; 0 -1], [0 1; 1 0], [-1 0; 0 1], [0 -1; -1 0])
         evaluated = zeros(Bool, n)
         output_data = zeros(Int8, N, N, n)
-        evaluate_lazy(e.fragment, n, p, t, evaluated, output_data, transform)
+        evaluate_lazy(e.fragment, 1, p, t, evaluated, output_data, transform)
         # output is final frame (most complex)
         my_acc += map(b2f, output_data[:,:,n])
     end
