@@ -10,10 +10,10 @@ function srand(d::Direct, n)
     d.rng = MersenneTwister(n)
 end
 
-function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, d::Direct, display)
+function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, lazy, d::Direct, display)
     passed, t, p = 0, black, Position{board_size}()
     while passed < 2 && p.score.moves < max_moves
-        m = moves(a, p, t, d.rng)
+        m = moves(a, p, t, lazy, d.rng)
         if length(m) == 0
             passed += 1
         else
@@ -44,8 +44,8 @@ end
 # note that the higher ranked net plays first (as black), so if the result is a surprise
 # (with a !) then the order of the nets must be reversed from the log.
 
-function replay_direct(a::Vector{UInt8}, b::Vector{UInt8}, n, max, seed)
-    p = play(a, b, Direct(n, max, MersenneTwister(seed)), board_display)
+function replay_direct(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, lazy, seed)
+    p = play(a, b, board_size, max_moves, lazy, Direct(MersenneTwister(seed)), board_display)
     println("\n\nfinal position:")
     println(p)
 end

@@ -7,4 +7,4 @@ for i in 1:10
 end
 
 d = random_population(200, 50)
-evolve(d, 9, 54, 25, 10000, "../evol-2.dump", Direct(MersenneTwister(1)))
+evolve(d, 9, 54, true, 25, 10000, "../evol-2.dump", Direct(MersenneTwister(1)))

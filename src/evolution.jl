@@ -1,7 +1,7 @@
 
 const survival = 0.5
 
-function evolve(population, board_size, max_moves, nplays, nrounds, path, algorithm)
+function evolve(population, board_size, max_moves, lazy, nplays, nrounds, path, algorithm)
     known = Set{UInt64}()
     exists(path) && rm(path)
     dump(known, path, population)
@@ -12,7 +12,7 @@ function evolve(population, board_size, max_moves, nplays, nrounds, path, algori
             # seed below counts from 1 and can be reproduced from the log
             srand(algorithm, j+(i-1)*nplays)
             result = play(population[a], population[b], board_size, max_moves,
-                          algorithm, null_display)
+                          lazy, algorithm, null_display)
 #            result = play(population[a], population[b], algorithm, board_display)
             display_result(i, nrounds, j, nplays, population, a, b, result)
             apply_result!(population, a, b, result)

@@ -65,7 +65,12 @@
 #   positive (mod available): direct index into input
 #   negative (mod available): indirect index into input (relative to "here")
 # general encoding from byte <-> float is
-#   float(b) = signed(b) / 16 with hard clipping
+#   float(b) = signed(b) / scale (see below) with hard clipping
+
+# chunking
+
+# new fragments start every chunk (see below) bytes.  this allows changes
+# without 'breaking' all following fragments.
 
 
 # --- data structuring
@@ -77,6 +82,9 @@ unpack_arithmetic_size(n::UInt8) = (n & 0x03) + 1
 const scale = 64.0
 b2f(b::Int8) = Float32(reinterpret(Int8, b) / scale)
 f2b(f::Number) = Int8(min(127, max(-128, round(f * scale))))
+
+const chunk = 16
+chunkend(s) = read(s, UInt8, min(available(s), s.state % chunk))
 
 const given = 12  # indices that are constant or taken from position
 const header = map(UInt8, collect("goxp"))
@@ -90,6 +98,7 @@ const lheader = 7   # 4 chars, 1 version, 2 length
     # discards some bits and life gets complicated.
     operation::Operation
     data::Vector{UInt8}
+    padding::Vector{UInt8}
 end
 
 @auto_hash_equals type Expression
@@ -129,7 +138,7 @@ function pack_kernel(input, edge, c, coeffs)
     data = [UInt8(nx-1) << 4 | UInt8(ny-1)]
     push!(data, UInt8(input-1), f2b(edge), UInt8((cy-1)*nx + cx-1))
     append!(data, map(f2b, reshape(coeffs, nx*ny)))
-    Fragment(kernel, data)
+    Fragment(kernel, data, [])
 end
 
 function unpack_arithmetic(f::Fragment, available)
@@ -164,17 +173,17 @@ function pack_arithmetic(coeffs...)
     data
 end
 
-pack_addition(coeffs...) = Fragment(addition, pack_arithmetic(coeffs...))
+pack_addition(coeffs...) = Fragment(addition, pack_arithmetic(coeffs...), [])
 
 function pack_product(coeffs...)
     data = pack_arithmetic(coeffs...)
     data[1] = data[1] | 0x40
-    Fragment(product, data)
+    Fragment(product, data, [])
 end
 
 function Base.push!(e::Expression, f::Fragment)
     push!(e.fragment, f)
-    e.length += length(f.data)
+    e.length += length(f.data) + length(f.padding)
 end
 
 function unpack_expression(data::Vector{UInt8})
@@ -196,9 +205,9 @@ function unpack_expression(data::Vector{UInt8})
             n = unpack_arithmetic_size(tag) * 2 + 1
         end
         if n > available(d)
-            f = Fragment(junk, read(d, available(d)))
+            f = Fragment(junk, read(d, available(d)), chunkend(d))
         else
-            f = Fragment(op, read(d, n))
+            f = Fragment(op, read(d, n), chunkend(d))
         end
         push!(e, f)
     end
@@ -211,7 +220,15 @@ end
 
 Expression(data::Vector{UInt8}) = unpack_expression(data)
 
-pack_expression(e::Expression) = vcat(header, [0x00], reinterpret(UInt8, [e.length]), [f.data for f in e.fragment]...)
+function pack_expression(e::Expression)
+    data = vcat(header, [0x00], reinterpret(UInt8, [e.length]))
+    for f in e.fragment
+        fragment = vcat(f.data, f.padding)
+        append!(data, fragment)
+    end
+    @assert length(data) == e.length
+    data
+end
 
 
 # --- evaluation
@@ -362,6 +379,159 @@ function evaluate(e::Array{UInt8, 1}, p::Position, t::Point)
 end
 
 
+
+# --- lazy evaluation
+
+
+function lookup_lazy{N}(f, index, x, y, ox, oy, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t::Point, transform)
+    if 1 <= x <= N && 1 <= y <= N
+        if input > given
+            # yay, simple lookup
+            i = input-given
+            e[i] || evaluate_lazy(f, i, p, t, e, d, transform)
+            b2f(d[x, y, i])
+        elseif input == 1
+            # constant 0
+            zero(Float32)
+        elseif input == 2
+            # constant 1
+            one(Float32)
+        elseif input == 3
+            # 1 for "our" colour, 0 for space, "-1" for opponent's colour
+            Float32(Int(t) * Int(point(p, x, y)))
+        elseif input == 4
+            if ox != 0 && oy != 0
+                # kernel: 1 if same group as 'centre', -1 if not
+                Float32(p.groups.index[x, y] == p.groups.index[ox, oy] ? 1 : -1)
+            else
+                # arithmetic: can't think of anything better here
+                Float32(p.groups.index[x, y])
+            end
+        elseif input == 5
+            # size of group at that point
+            i = p.groups.index[x, y]
+            if i > 0
+                Float32(p.groups.size[i])
+            else
+                edge
+            end
+        elseif input == 6
+            # number of lives in group at that point
+            i = p.groups.index[x, y]
+            if i > 0
+                Float32(p.groups.lives[i])
+            else
+                edge
+            end
+        elseif input == 7
+            # distance to nearest stone (-ve for opponent's colour)
+            Float32(Int(t) * p.flood.distance[x, y])
+        elseif input == 8
+            # 1 if owned by us, -1 owned by opponent, 0 otherwise
+            b = p.space.border[x, y]
+            if b == 0 || b == 3
+                zero(Float32)
+            elseif b == border_mask(t)
+                one(Float32)
+            else
+                -one(Float32)
+            end
+        elseif input == 9
+            if ox != 0 && oy != 0
+                # 1 if same space as 'centre', -1 if not            
+                Float32(p.space.index[x, y] == p.space.index[ox, oy] ? 1 : -1)
+            else
+                # polynomial: can't think of anything better here
+                Float32(p.space.index[x, y])
+            end
+        elseif input == 10
+            # constant score (+ve for us)
+            Float32(p.score.total * Int(t))
+        elseif input == 11
+            # fraction of space that is 'owned'
+            Float32(p.score.owned / (N*N - p.score.stones))
+        elseif input == 12
+            # fraction of board that is stones
+            p.score.stones
+        end
+    else
+        edge
+    end
+end
+
+function evaluate_lazy_kernel{N}(f::Vector{Fragment}, index, p::Position{N}, t::Point, e, d::Array{Int8, 3}, transform)
+    input, edge, (cx, cy), coeffs = unpack_kernel(f[index], index-1)
+    nx, ny = size(coeffs)
+    my_acc = zeros(Float32, N, N)
+    @forall i j N begin
+        for di in 1:nx
+            for dj in 1:ny
+                ddi, ddj = [di-cx dj-cy] * transform
+                # the best way to understand this is to draw a picture.
+                # it's basically a coord change from one frame (coeffs)
+                # to the other (data).
+                my_acc[i,j] += coeffs[di, dj] * lookup_lazy(f, index, i+ddi, j+ddj, i, j, e, d, input, edge, p, t, transform)
+            end
+        end
+        d[i, j, index] = f2b(my_acc[i, j] / sqrt(nx*ny))
+    end
+    e[index] = true
+end
+
+function evaluate_lazy_arithmetic{N}(f::Vector{Fragment}, index, p::Position{N}, t::Point, e, d::Array{Int8, 3}, g, transform)
+    coeffs = unpack_addition(f[index], index-1)
+    my_acc = zeros(Float32, N, N)
+    for (input, scale, change) in coeffs
+        @forall i j N begin
+            value = lookup_lazy(f, index, i, j, 0, 0, e, d, input, 0.0, p, t, transform)
+            my_acc[i, j] += scale * (change ? g(value) : value)
+        end
+    end
+    @forall i j N begin
+        d[i, j, index] = f2b(my_acc[i, j] / sqrt(length(coeffs)))
+    end
+    e[index] = true
+end
+
+function evaluate_lazy(f::Vector{Fragment}, i, p::Position, t::Point, e, d::Array{Int8, 3}, transform)
+    fragment = f[i]
+    if fragment.operation == kernel
+        evaluate_lazy_kernel(f, i, p, t, e, d, transform)
+    elseif fragment.operation == addition
+        evaluate_lazy_arithmetic(f, i, p, t, e, d, x -> sin(pi * x / 128), transform)
+    elseif fragment.operation == product
+        evaluate_lazy_arithmetic(f, i, p, t, e, d, x -> 1/x, transform)
+    elseif i > 1
+        # copy previous data on no-op so that final data (used as
+        # output) is always valid
+        e[i-1] || evaluate_lazy(f, i-1, p, t, e, d, transform)
+        d[:,:,i] = d[:,:,i-1]
+    end
+end
+
+function evaluate_lazy{N}(e::Expression, p::Position{N}, t::Point)
+    n = length(e.fragment)
+    my_acc = zeros(Float32, N, N)
+    # these are the 8 ways that kernels can be evaluated.  if we treat
+    # the numbers as log(prob) then it makes a kind of weird sense
+    # that we are adding these together.
+    for transform in ([1 0; 0 1], [0 1; -1 0], [-1 0; 0 -1], [0 -1; 1 0],
+                      [1 0; 0 -1], [0 1; 1 0], [-1 0; 0 1], [0 -1; -1 0])
+        evaluated = zeros(Bool, n)
+        output_data = zeros(Int8, N, N, n)
+        evaluate_lazy(e.fragment, n, p, t, evaluated, output_data, transform)
+        # output is final frame (most complex)
+        my_acc += map(b2f, output_data[:,:,n])
+    end
+    my_acc
+end
+
+function evaluate_lazy(e::Array{UInt8, 1}, p::Position, t::Point)
+    evaluate_lazy(Expression(e), p, t)
+end
+
+
+
 # --- move extraction
 
 
@@ -374,8 +544,8 @@ end
 # by the largest numbers.  so instead, we just pick off the largest
 # scoring locations (and then exclude invalid moves etc).
 
-function moves{N}(e::Array{UInt8, 1}, p::Position{N}, t::Point, rng)
-    logp = evaluate(e, p, t)
+function moves{N}(e::Array{UInt8, 1}, p::Position{N}, t::Point, lazy::Bool, rng)
+    logp = lazy ? evaluate_lazy(e, p, t) : evaluate(e, p, t)
     indexed = reshape([(logp[i, j], (i, j)) for i in 1:N, j in 1:N], N*N)
     positive = filter(x -> x[1] > 0, indexed)
     possible = filter(x -> valid(p, t, x[2]...), positive)
