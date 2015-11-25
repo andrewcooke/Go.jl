@@ -18,8 +18,10 @@ function evolve(population, board_size, max_moves, lazy, nplays, nrounds, path, 
             apply_result!(population, a, b, result)
             stats = update_stats(stats, result)
         end
-        println("top is $(name(population[1])):")
-        dump_expression(population[1])
+        for j in 1:min(3, length(population))
+            println("$(name(population[j], j))")
+            dump_expression(population[j])
+        end
         println("")
         if i != nrounds
             population = update_population(population, stats, board_size)
@@ -39,7 +41,7 @@ end
 
 const name_length = 16
 name(data) = sha1(data)[1:name_length]
-name(data, rank) = "$(name(data)) $(rank)"
+name(data, rank) = "$(name(data)):$(rank)"
 
 function surprise(a, b, result)
     # best at start (low numbers); score positive if a won.

@@ -593,7 +593,7 @@ int(x) = typeof(x) <: Integer
 function dump_kernel(i, f)
     n = length(f)
     input = lookup_name(unpack_kernel(f[i], n-i)[1], n)
-    println("$i kernel($input)")
+    println(" $i kernel($input)")
     filter(int, [input])
 end
 
@@ -603,7 +603,7 @@ function dump_arithmetic(i, f, op)
     n = length(f)
     terms = unpack_arithmetic(f[i], n-i)
     expr = join(map(x -> term2str(n, x...), terms), " $op ")
-    println("$i $expr")
+    println(" $i $expr")
     filter(int, map(x -> lookup_name(x[1], n), terms))
 end
 
