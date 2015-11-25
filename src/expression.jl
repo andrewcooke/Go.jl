@@ -69,8 +69,8 @@
 
 # chunking
 
-# new fragments start every chunk (see below) bytes.  this allows changes
-# without 'breaking' all following fragments.
+# new fragments start every chunk (see below) bytes after the header.
+# this allows changes without 'breaking' all following fragments.
 
 # evaluation order
 
@@ -96,7 +96,7 @@ f2b(f::Number) = Int8(min(127, max(-128, round(f * scale))))
 
 const chunk = 8
 function chunkend(s)
-    n = (s.state - 1) % chunk
+    n = (s.state - lheader - 1) % chunk
     if n > 0
         read(s, UInt8, min(available(s), chunk - n))
     else
@@ -238,6 +238,7 @@ function unpack_expression(data::Vector{UInt8})
     # this is all we support right now
     @assert e.version == 0x00
     @assert e.length == n_bytes
+    @assert (e.length - lheader) % chunk == 0
     e
 end
 
@@ -250,15 +251,18 @@ function pack_expression(e::Expression)
         append!(data, fragment)
         # this is not needed when packing previously unpacked data,
         # but is when assembling a hand-written fragment
-        if length(data) % chunk != 0
-            n = chunk - (length(data) % chunk)
-            append!(data, zeros(UInt8, n))
-            e.length += n
+        n = length(data) - lheader
+        if n % chunk != 0
+            m = chunk - (n % chunk)
+            append!(data, zeros(UInt8, m))
+            append!(f.padding, zeros(UInt8, m))
+            e.length += m
         end
     end
     # set length at end, with extra padding
     data[lheader-1:lheader] = reinterpret(UInt8, [e.length])
     @assert length(data) == e.length
+    @assert (e.length - lheader) % chunk == 0
     data
 end
 

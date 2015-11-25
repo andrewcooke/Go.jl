@@ -1,7 +1,7 @@
 
 for i in 1:10
     p = random_position(i, 9, 20)
-    e = random_expression(Go.chunk*rand(1:100))
+    e = random_expression(Go.lheader+Go.chunk*rand(1:100))
     @test Go.pack_expression(Go.unpack_expression(e)) == e
     d = evaluate(e, p, white)
     compare("expression/random-$i.txt", fix(d))
@@ -41,7 +41,7 @@ d = fix(evaluate(e, p, black))
 compare("expression/given-kernel-2.txt", d)
 
 p = Position{9}()
-e = random_expression(rand(1:1000))
+e = random_expression(Go.lheader+Go.chunk*rand(1:100))
 move!(p, black, 5, 5)
 for (i, (x,y)) in enumerate(((4,4),(4,5),(5,6),(4,6),(6,6),(6,5),(6,4),(5,4)))
     move!(p, white, x, y)
@@ -51,7 +51,7 @@ m = moves(e, p, black, false, MersenneTwister(1))
 @test !((5,5) in m)
 compare("expression/move-eye.txt", p, m)
 
-e = random_expression(100)
+e = random_expression(Go.lheader+Go.chunk*rand(1:10))
 dump_expression(e)
 
 e = Go.Expression()
@@ -60,7 +60,7 @@ push!(e, Go.pack_kernel(1, 0.0, (1,1), [-1 1; 0 0]))
 dump_expression(Go.pack_expression(e))
 
 for i in 1:100
-    e = random_expression(100)
+    e = random_expression(Go.lheader+Go.chunk*rand(1:10))
     p = random_position(i, 9, 20)
     m = moves(e, p, black, false, MersenneTwister(1))
     @test m == moves(e, p, black, true, MersenneTwister(1))

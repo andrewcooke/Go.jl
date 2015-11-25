@@ -118,6 +118,14 @@ function rotate(a::Vector)
     c
 end
 
+function rotate_chunks(a::Vector)
+    k = rand(0:cld(length(a) - lheader, chunk)-1)
+    n = lheader + chunk * k + 1
+    c = vcat(a[1:lheader], a[n:end], a[lheader+1:n-1])
+    print("rotate chunk $k $(name(a)) => $(name(c)) + ")
+    c
+end
+
 function merge(a::Vector, b::Vector)
     a, b = shuffle(Vector[a, b])
     c, i, j, attempts = a, 0, 0, 0
@@ -133,6 +141,11 @@ end
 function merge_with_rotate(a::Vector, b::Vector)
     a, b = shuffle(Vector[a, b])
     merge(a, rotate(b))
+end
+
+function merge_with_rotate_chunks(a::Vector, b::Vector)
+    a, b = shuffle(Vector[a, b])
+    merge(a, rotate_chunks(b))
 end
 
 function random_bytes(fraction)
@@ -182,7 +195,7 @@ function build_ops(length, temp)
     ops = Tuple{Number, Function}[
               (10, x -> random_bits(temp/10)(random_single(x))),
               (10, x -> merge(biased_pair(x)...)),
-              (1, x -> merge_with_rotate(biased_pair(x)...)),
+              (1, x -> merge_with_rotate_chunks(biased_pair(x)...)),
               (1, x -> random_bytes(temp/10)(random_single(x)))]
     if temp > 0.25
         push!(ops, (10, x -> random_bytes(temp/10)(random_single(x))))
