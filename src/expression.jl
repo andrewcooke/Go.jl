@@ -476,7 +476,8 @@ function lookup_lazy{N}(f, x, y, ox, oy, e, d::Array{Int8, 3}, input, edge, p::P
 end
 
 function evaluate_lazy_kernel{N}(f::Vector{Fragment}, index, p::Position{N}, t::Point, e, d::Array{Int8, 3}, transform)
-    input, edge, (cx, cy), coeffs = unpack_kernel(f[index], index-1)
+    n = length(f)
+    input, edge, (cx, cy), coeffs = unpack_kernel(f[index], n-index)
     nx, ny = size(coeffs)
     my_acc = zeros(Float32, N, N)
     @forall i j N begin
@@ -495,7 +496,8 @@ function evaluate_lazy_kernel{N}(f::Vector{Fragment}, index, p::Position{N}, t::
 end
 
 function evaluate_lazy_arithmetic{N}(f::Vector{Fragment}, index, p::Position{N}, t::Point, e, d::Array{Int8, 3}, g, transform)
-    coeffs = unpack_addition(f[index], index-1)
+    n = length(f)
+    coeffs = unpack_addition(f[index], n-index)
     my_acc = zeros(Float32, N, N)
     for (input, scale, change) in coeffs
         @forall i j N begin
@@ -578,9 +580,9 @@ const lookup_dict = Dict{Int,ASCIIString}(1 => "zero",
                                           11 => "owned %",
                                           12 => "stones %")
 
-function lookup_name(input)
+function lookup_name(input, n)
     if input > given
-        input - given
+        n-(input - given)+1
     else
         lookup_dict[input]
     end
@@ -589,26 +591,28 @@ end
 int(x) = typeof(x) <: Integer
 
 function dump_kernel(i, f)
-    input = lookup_name(unpack_kernel(f, i-1)[1])
+    n = length(f)
+    input = lookup_name(unpack_kernel(f[i], n-i)[1], n)
     println("$i kernel($input)")
     filter(int, [input])
 end
 
-term2str(input, scale, change) = string("$(scale)*$(lookup_name(input))", change ? "!" : "")
+term2str(n, input, scale, change) = string("$(scale)*$(lookup_name(input, n))", change ? "!" : "")
 
 function dump_arithmetic(i, f, op)
-    terms = unpack_arithmetic(f, i-1)
-    expr = join(map(x -> term2str(x...), terms), " $op ")
+    n = length(f)
+    terms = unpack_arithmetic(f[i], n-i)
+    expr = join(map(x -> term2str(n, x...), terms), " $op ")
     println("$i $expr")
-    filter(int, map(x -> lookup_name(x[1]), terms))
+    filter(int, map(x -> lookup_name(x[1], n), terms))
 end
 
 function dump_fragment(i, f, used)
-    if f.operation == kernel
+    if f[i].operation == kernel
         refs = dump_kernel(i, f)
-    elseif f.operation == addition
+    elseif f[i].operation == addition
         refs = dump_arithmetic(i, f, "+")
-    elseif f.operation == product
+    elseif f[i].operation == product
         refs = dump_arithmetic(i, f, "*")
     else
         refs = Int[]
@@ -619,13 +623,10 @@ function dump_fragment(i, f, used)
 end
 
 function dump_expression(e::Expression)
-    used = Set{Int}()
-    for (i, fragment) in reverse(collect(enumerate(e.fragment)))
-        if fragment.operation != junk
-            if length(used) == 0 || i in used
-                push!(used, i)
-                dump_fragment(i, fragment, used)
-            end
+    used = Set([1])
+    for (i, fragment) in collect(enumerate(e.fragment))
+        if i in used
+            dump_fragment(i, e.fragment, used)
         end
     end
 end

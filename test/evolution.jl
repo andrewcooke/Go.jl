@@ -6,5 +6,5 @@ for i in 1:10
     Go.unpack_expression(c)
 end
 
-d = random_population(200, 50)
+d = random_population(500, 50)
 evolve(d, 9, 54, true, 25, 10000, "../evol-2.dump", Direct(MersenneTwister(1)))
