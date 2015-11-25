@@ -1,7 +1,7 @@
 
 for i in 1:10
     p = random_position(i, 9, 20)
-    e = random_expression(rand(8:1000))
+    e = random_expression(Go.chunk*rand(1:100))
     @test Go.pack_expression(Go.unpack_expression(e)) == e
     d = evaluate(e, p, white)
     compare("expression/random-$i.txt", fix(d))
@@ -53,6 +53,11 @@ compare("expression/move-eye.txt", p, m)
 
 e = random_expression(100)
 dump_expression(e)
+
+e = Go.Expression()
+push!(e, Go.pack_addition((Go.given+1, 1, false)))
+push!(e, Go.pack_kernel(1, 0.0, (1,1), [-1 1; 0 0]))
+dump_expression(Go.pack_expression(e))
 
 for i in 1:100
     e = random_expression(100)

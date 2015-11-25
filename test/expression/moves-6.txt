@@ -29,4 +29,4 @@
  . .     X   . . .  0b0b    0e  050505
 
   0  [black  pr=1  sp=1  ] [white  pr=1  sp=1  ]
-[(4,6),(3,5),(3,6)]
+Tuple{Any,Tuple{Int64,Int64}}[]

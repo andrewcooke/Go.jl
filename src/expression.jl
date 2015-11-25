@@ -94,8 +94,15 @@ const scale = 64.0
 b2f(b::Int8) = Float32(reinterpret(Int8, b) / scale)
 f2b(f::Number) = Int8(min(127, max(-128, round(f * scale))))
 
-const chunk = 16
-chunkend(s) = read(s, UInt8, min(available(s), s.state % chunk))
+const chunk = 8
+function chunkend(s)
+    n = (s.state - 1) % chunk
+    if n > 0
+        read(s, UInt8, min(available(s), chunk - n))
+    else
+        UInt8[]
+    end
+end
 
 const given = 12  # indices that are constant or taken from position
 const header = map(UInt8, collect("goxp"))
@@ -148,7 +155,7 @@ function pack_kernel(input, edge, c, coeffs)
     nx, ny = size(coeffs)
     data = [UInt8(nx-1) << 4 | UInt8(ny-1)]
     push!(data, UInt8(input-1), f2b(edge), UInt8((cy-1)*nx + cx-1))
-    append!(data, map(f2b, reshape(coeffs, nx*ny)))
+    append!(data, reinterpret(UInt8, map(f2b, reshape(coeffs, nx*ny))))
     Fragment(kernel, data, [])
 end
 
@@ -207,7 +214,7 @@ function unpack_expression(data::Vector{UInt8})
     d = StatefulIterator(data)
     @assert read(d, 4) == header
     e = Expression(read(d))
-    length = read(d, UInt16)
+    n_bytes = read(d, UInt16)
     
     while !done(d)
         tag = peek(d)
@@ -222,27 +229,35 @@ function unpack_expression(data::Vector{UInt8})
             n = unpack_arithmetic_size(tag) * 2 + 1
         end
         if n > available(d)
-            f = Fragment(junk, read(d, available(d)), chunkend(d))
+            f = Fragment(junk, read(d, available(d)), [])
         else
             f = Fragment(op, read(d, n), chunkend(d))
         end
         push!(e, f)
     end
-
     # this is all we support right now
     @assert e.version == 0x00
-    @assert e.length == length
+    @assert e.length == n_bytes
     e
 end
 
 Expression(data::Vector{UInt8}) = unpack_expression(data)
 
 function pack_expression(e::Expression)
-    data = vcat(header, [0x00], reinterpret(UInt8, [e.length]))
+    data = vcat(header, [0x00], [0x00, 0x00])
     for f in e.fragment
         fragment = vcat(f.data, f.padding)
         append!(data, fragment)
+        # this is not needed when packing previously unpacked data,
+        # but is when assembling a hand-written fragment
+        if length(data) % chunk != 0
+            n = chunk - (length(data) % chunk)
+            append!(data, zeros(UInt8, n))
+            e.length += n
+        end
     end
+    # set length at end, with extra padding
+    data[lheader-1:lheader] = reinterpret(UInt8, [e.length])
     @assert length(data) == e.length
     data
 end
@@ -590,10 +605,39 @@ end
 
 int(x) = typeof(x) <: Integer
 
+function cell(value, lo, hi, symbols)
+    if value <= lo
+        symbols[1]
+    elseif value >= hi
+        symbols[3]
+    else
+        symbols[2]
+    end
+end
+
+function sketch_kernel(kernel, cx, cy)
+    nx, ny = size(kernel)
+    ord = sort(reshape(kernel, nx*ny))
+    lo = nx*ny >=9 ? ord[cld(length(ord), 3)] : ord[1]
+    hi = nx*ny >=9 ? ord[length(ord) - fld(length(ord), 3)] : ord[end]
+    for j in 1:ny
+        for i in 1:nx
+            if i == cx && j == cy
+                print(cell(kernel[i,j], lo, hi, "O.@"))
+            else
+                print(cell(kernel[i,j], lo, hi, "- +"))
+            end
+        end
+        println()
+    end
+end
+
 function dump_kernel(i, f)
     n = length(f)
-    input = lookup_name(unpack_kernel(f[i], n-i)[1], n)
-    println(" $i kernel($input)")
+    (input, edge, (cx, cy), kernel) = unpack_kernel(f[i], n-i)
+    input = lookup_name(input, n)
+    println(" $i kernel($(input))")
+    sketch_kernel(kernel, cx, cy)
     filter(int, [input])
 end
 
