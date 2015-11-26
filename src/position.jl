@@ -82,7 +82,7 @@ Space{N}(g::Space{N}) = Space{N}(g)
     spaces::Int
     prisoners::Int
     Details() = new(0, 0)
-    Deatils(d::Details) = new(d.spaces, d.prisoners)
+    Details(d::Details) = new(d.spaces, d.prisoners)
 end
 
 @auto_hash_equals type Score
@@ -92,7 +92,7 @@ end
     stones::Float32
     colour::Dict{Point, Details}
     Score() = new(0, 0, 0, 0, Dict{Point, Details}(black=>Details(), white=>Details()))
-    Score(s::Score) = new(s.total, s.moves, s.owned, s.stones, [x=>s.colour[x] for x in (black, white)])
+    Score(s::Score) = new(s.total, s.moves, s.owned, s.stones, Dict([x=>Details(s.colour[x]) for x in (black, white)]))
 end
 
 """a single position (implicitly, in a search tree).  combines Board,
@@ -554,24 +554,64 @@ end
 # --- query state
 
 
-# TODO - really needs move history herep
-function valid{N}(p::Position{N}, t::Point, x, y)
-    if point(p, x, y) != empty
+function valid{N}(h::Vector{Position{N}}, t::Point, x, y)
+    if point(h[end], x, y) != empty
+        return false
+    end
+    if ko(h, t, x, y)
         return false
     end
     @forneighbours x y N xx yy begin
-        tt = point(p, xx, yy)
+        tt = point(h[end], xx, yy)
         if tt == empty
             return true
         elseif tt == t
-            if p.groups.lives[p.groups.index[xx, yy]] > 1
+            if h[end].groups.lives[h[end].groups.index[xx, yy]] > 1
                 return true
             end
         else
-            if p.groups.lives[p.groups.index[xx, yy]] == 1
+            if h[end].groups.lives[h[end].groups.index[xx, yy]] == 1
                 return true
             end
         end
     end
     false
+end
+
+# test for ko
+function ko{N}(h::Vector{Position{N}}, t::Point, x, y)
+    # we need at least two previous positions (actually more, but
+    # perhaps we only store two)
+    if length(h) < 2
+        return false
+    end
+    # for a ko situation, the previous move must have captured a
+    # single piece.
+    opponent = other(t)
+    if (h[end].score.colour[opponent].prisoners - 
+        h[end-1].score.colour[opponent].prisoners) != 1
+        return false
+    end
+    if (h[end].score.colour[opponent].spaces - 
+        h[end-1].score.colour[opponent].spaces) != 1
+        return false
+    end
+    # and there must be a possible group that we capture now, with a
+    # single stone, that has just moved there.
+    candidate = false
+    @forneighbours x y N xx yy begin
+        if point(h[end], xx, yy) == opponent
+            g = h[end].groups.index[xx, yy]
+            if h[end].groups.lives[g] == 1
+                if h[end].groups.size[g] == 1 && point(h[end-1], xx, yy) == empty && !candidate
+                    candidate = true
+                else
+                    # we killed a non-ko group, so this isn't ko
+                    return false
+                end
+            end
+        end
+    end
+    candidate && println("ko!")
+    return candidate
 end

@@ -569,17 +569,18 @@ end
 # the above generates a matrix of 'values' that can be positive or
 # negative.  the best interpretation i can give to that is log(prob).
 # and in a sense i get to choose, because if i decide that and evolve
-# on that basis, then that is what i get.
+# on that basis, then that is what i get (in an ideal world).
 
 # however, it's damn spiky.  so any random sampling will be dominated
 # by the largest numbers.  so instead, we just pick off the largest
 # scoring locations (and then exclude invalid moves etc).
 
-function moves{N}(e::Array{UInt8, 1}, p::Position{N}, t::Point, lazy::Bool, rng)
+function moves{N}(e::Array{UInt8, 1}, h::Vector{Position{N}}, t::Point, lazy::Bool, rng)
+    p = h[end]
     logp = lazy ? evaluate_lazy(e, p, t) : evaluate(e, p, t)
     indexed = reshape([(logp[i, j], (i, j)) for i in 1:N, j in 1:N], N*N)
     positive = filter(x -> x[1] > 0, indexed)
-    possible = filter(x -> valid(p, t, x[2]...), positive)
+    possible = filter(x -> valid(h, t, x[2]...), positive)
     map(x -> x[2], sort(shuffle(rng, possible), by=x -> x[1]))
 end
 
