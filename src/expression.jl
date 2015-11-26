@@ -40,17 +40,21 @@
 #         (any final operation that is incomplete because of the length
 #         is simply discarded)
 # operations: repeated until end (discarding any incomplete at end)
-#   bit 7 of first byte gives type and size
-#   0: kernel
+#   bit 6+7 of first byte gives type
+#   00: jump
+#     byte 0:
+#       bit 6-7 (delegate tag)
+#       bit 0-5 index to jump to (-n-1 so always -ve, relative)
+#   01: kernel
 #     byte 0: 
-#       bit 7: 0 (polynomial tag)
-#       bit 0-6: size in x and y (see code)
+#       bit 6-7: 0 (kernel tag)
+#       bit 0-5: size in x and y (see code)
 #     byte 1: byte used for input outside board edges
 #     byte 2: (mod size of grid) location of output within the kernel 
 #     byte 3: index into input
 #     remaining bytes as kernel (see below for byte -> float)
 #     all normalised by sqrt(n entries)
-#   1: arithmetic
+#   10, 11: arithmetic
 #     byte 0:
 #       bit 7: 1 (arithmetic tag)
 #       bit 6:
@@ -87,7 +91,7 @@
 # --- data structuring
 
 
-unpack_kernel_size(n::UInt8) = ((n & 0x70) >> 4) + 1, (n & 0x0f) + 1
+unpack_kernel_size(n::UInt8) = ((n & 0x38) >> 3) + 1, (n & 0x07) + 1
 unpack_arithmetic_size(n::UInt8) = (n & 0x03) + 1
 
 const scale = 64.0
@@ -108,7 +112,7 @@ const given = 12  # indices that are constant or taken from position
 const header = map(UInt8, collect("goxp"))
 const lheader = 7   # 4 chars, 1 version, 2 length
 
-@enum Operation kernel product addition junk
+@enum Operation jump=0 kernel=1 addition=2 product=3 junk=4
 
 @auto_hash_equals immutable Fragment
     # we only parse to this level because we need to preserve all bits
@@ -129,15 +133,32 @@ end
 end
 
 function read_input(e::StatefulIterator{Vector{UInt8},Int}, available)
+    # signed value
     input = read(e, Int8)
     n = given + available
     # abs(-128) = -128 for Int8
     index = abs(Int(input)) % n
     if input < 0
+        # relative indexing for -ve values, -1 means next
         n - index
     else
+        # absolute indexing for +ve values, 0 means bottom
         1 + index
     end
+end
+
+function unpack_jump(f::Fragment, available)
+    masked = reinterpret(Int8, f.data[1] & 0x3f)
+    # clunky, but allows same routine to be called
+    # zero maps to -1
+    read_input(StatefulIterator([reinterpret(UInt8, -masked-one(Int8))]), available)
+end
+
+function pack_jump(input)
+    @assert input < 0
+    # -1 maps to zero
+    n = UInt8((-input-1) & 0x3f)
+    Fragment(jump, [n], [])
 end
 
 function unpack_kernel(f::Fragment, available)
@@ -153,7 +174,7 @@ end
 function pack_kernel(input, edge, c, coeffs)
     cx, cy = c
     nx, ny = size(coeffs)
-    data = [UInt8(nx-1) << 4 | UInt8(ny-1)]
+    data = [UInt8(nx-1) << 3 | UInt8(ny-1)]
     push!(data, UInt8(input-1), f2b(edge), UInt8((cy-1)*nx + cx-1))
     append!(data, reinterpret(UInt8, map(f2b, reshape(coeffs, nx*ny))))
     Fragment(kernel, data, [])
@@ -219,14 +240,21 @@ function unpack_expression(data::Vector{UInt8})
     while !done(d)
         tag = peek(d)
         if tag & 0x80 == 0
-            op = kernel
-            n = prod(unpack_kernel_size(tag)) + 4
-        elseif tag & 0x40 == 0
-            op = addition
-            n = unpack_arithmetic_size(tag) * 2 + 1
+            if tag & 0x40 == 0
+                op = jump
+                n = 1
+            else
+                op = kernel
+                n = prod(unpack_kernel_size(tag)) + 4
+            end
         else
-            op = product
-            n = unpack_arithmetic_size(tag) * 2 + 1
+            if tag & 0x40 == 0
+                op = addition
+                n = unpack_arithmetic_size(tag) * 2 + 1
+            else
+                op = product
+                n = unpack_arithmetic_size(tag) * 2 + 1
+            end
         end
         if n > available(d)
             f = Fragment(junk, read(d, available(d)), [])
@@ -339,8 +367,10 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N},
             # fraction of board that is stones
             p.score.stones
         end
-    else
+    elseif 0 <= x <= N+1 && 0 <= y <= N+1
         edge
+    else
+        0
     end
 end
 
@@ -489,8 +519,10 @@ function lookup_lazy{N}(f, x, y, ox, oy, e, d::Array{Int8, 3}, input, edge, p::P
             # fraction of board that is stones
             p.score.stones
         end
-    else
+    elseif 0 <= x <= N+1 && 0 <= y <= N+1
         edge
+    else
+        0
     end
 end
 
@@ -610,6 +642,13 @@ end
 
 int(x) = typeof(x) <: Integer
 
+function dump_jump(i, f)
+    n = length(f)
+    input = lookup_name(unpack_jump(f[i], n-i), n)
+    println(" $i jump to $(input)")
+    filter(int, [input])
+end
+
 function cell(value, lo, hi, symbols)
     if value <= lo
         symbols[1]
@@ -657,7 +696,9 @@ function dump_arithmetic(i, f, op)
 end
 
 function dump_fragment(i, f, used)
-    if f[i].operation == kernel
+    if f[i].operation == jump
+        refs = dump_jump(i, f)
+    elseif f[i].operation == kernel
         refs = dump_kernel(i, f)
     elseif f[i].operation == addition
         refs = dump_arithmetic(i, f, "+")

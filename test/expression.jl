@@ -51,8 +51,11 @@ m = moves(e, [p], black, false, MersenneTwister(1))
 @test !((5,5) in m)
 compare("expression/move-eye.txt", p, m)
 
-e = random_expression(Go.lheader+Go.chunk*rand(1:10))
-dump_expression(e)
+for i in 1:10
+    e = random_expression(Go.lheader+Go.chunk*rand(1:10))
+    println(bytes2hex(e))
+    dump_expression(e)
+end
 
 e = Go.Expression()
 push!(e, Go.pack_addition((Go.given+1, 1, false)))
