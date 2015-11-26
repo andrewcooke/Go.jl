@@ -374,6 +374,13 @@ function lookup{N}(x, y, ox, oy, d::Array{Int8, 3}, input, edge, p::Position{N},
     end
 end
 
+function evaluate_jump{N}(f::Fragment, p::Position{N}, t::Point, d::Array{Int8, 3}, available)
+    input = unpack_jump(f, available)
+    @forall i j N begin
+        d[i, j, available+1] = f2b(lookup(i, j, 0, 0, d, input, 0.0, p, t))
+    end
+end
+
 function evaluate_kernel{N}(f::Fragment, p::Position{N}, t::Point, d::Array{Int8, 3}, available, transform)
     input, edge, (cx, cy), coeffs = unpack_kernel(f, available)
     nx, ny = size(coeffs)
@@ -407,7 +414,9 @@ function evaluate_arithmetic{N}(f::Fragment, p::Position{N}, t::Point, d::Array{
 end
 
 function evaluate(f::Fragment, p::Position, t::Point, d::Array{Int8, 3}, available, transform)
-    if f.operation == kernel
+    if f.operation == jump
+        evaluate_jump(f, p, t, d, available)
+    elseif f.operation == kernel
         evaluate_kernel(f, p, t, d, available, transform)
     elseif f.operation == addition
         evaluate_arithmetic(f, p, t, d, available, x -> sin(pi * x / 128))
@@ -526,6 +535,15 @@ function lookup_lazy{N}(f, x, y, ox, oy, e, d::Array{Int8, 3}, input, edge, p::P
     end
 end
 
+function evaluate_lazy_jump{N}(f::Vector{Fragment}, index, p::Position{N}, t::Point, e, d::Array{Int8, 3}, transform)
+    n = length(f)
+    input = unpack_jump(f[index], n-index)
+    @forall i j N begin
+        d[i, j, n-index+1] = f2b(lookup_lazy(f, i, j, 0, 0, e, d, input, 0.0, p, t, transform))
+    end
+    e[n-index+1] = true
+end
+
 function evaluate_lazy_kernel{N}(f::Vector{Fragment}, index, p::Position{N}, t::Point, e, d::Array{Int8, 3}, transform)
     n = length(f)
     input, edge, (cx, cy), coeffs = unpack_kernel(f[index], n-index)
@@ -564,7 +582,9 @@ end
 
 function evaluate_lazy(f::Vector{Fragment}, i, p::Position, t::Point, e, d::Array{Int8, 3}, transform)
     fragment = f[i]
-    if fragment.operation == kernel
+    if fragment.operation == jump
+        evaluate_lazy_jump(f, i, p, t, e, d, transform)
+    elseif fragment.operation == kernel
         evaluate_lazy_kernel(f, i, p, t, e, d, transform)
     elseif fragment.operation == addition
         evaluate_lazy_arithmetic(f, i, p, t, e, d, x -> sin(pi * x / 128), transform)

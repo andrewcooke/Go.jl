@@ -29,4 +29,4 @@
  .         .   . .  01        04  0707
 
   1  [black  pr=0  sp=2  ] [white  pr=0  sp=1  ]
-Tuple{Any,Tuple{Int64,Int64}}[]
+[(9,9),(8,9)]
