@@ -109,7 +109,7 @@ function chunkend(s)
 end
 
 const given_atom = 10
-const given_kern = 2
+const given_kern = 3
 const header = map(UInt8, collect("goxp"))
 const lheader = 7   # 4 chars, 1 version, 2 length
 
@@ -361,6 +361,16 @@ function lookup{N}(f, x, y, ox, oy, e, d::Array{Int8, 3}, input, edge, p::Positi
                 elseif input == 2
                     # distance to nearest stone (-ve for opponent's colour)
                     Float32(Int(t) * p.flood.distance[x, y])
+                elseif input == 3
+                    # -1 if owned by us, 1 owned by opponent, 0 otherwise
+                    b = p.space.border[x, y]
+                    if b == 0 || b == 3
+                        zero(Float32)
+                    elseif b == border_mask(t)
+                        -one(Float32)
+                    else
+                        one(Float32)
+                    end
                 end
             end
         elseif 0 <= x <= N+1 && 0 <= y <= N+1

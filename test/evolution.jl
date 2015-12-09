@@ -6,6 +6,6 @@ for i in 1:10
     Go.unpack_expression(c)
 end
 
-#d = random_population(Go.lheader+Go.chunk*50, 50)
-#evolve(d, 19, 1000, 25, 10000, "../evol-2.dump")
-evolve(undump("../evol-2.dump")[2][1:50], 19, 1000, 25, 10000, "../evol-2.dump")
+d = random_population(Go.lheader+Go.chunk*50, 50)
+evolve(d, 19, 1000, 25, 10000, "../evol-2.dump")
+#evolve(undump("../evol-2.dump")[2][1:50], 19, 1000, 25, 10000, "../evol-2.dump")

@@ -472,13 +472,6 @@ function score!{N}(x::Score, s::Space{N}, g::Groups{N})
     foldl(f, x, s.border)
     b, w = x.colour[black], x.colour[white]
     x.total = b.prisoners + b.spaces - (w.prisoners + w.spaces)
-    # add in known-dead groups
-#    for (sz, lv) in zip(g.size, g.lives)
-#        if lv == 1
-#            # the prisoners + the space
-#            x.total += sz * 2
-#        end
-#    end
     # two measures of progress
     x.stones = count(x -> x == 0, s.border)
     x.owned = b.spaces + w.spaces
