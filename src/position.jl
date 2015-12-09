@@ -459,7 +459,7 @@ function index_new_space!{N}(s::Space{N}, b::Board{N}, x, y)
     end
 end
 
-function score!{N}(x::Score, s::Space{N})
+function score!{N}(x::Score, s::Space{N}, g::Groups{N})
     function f(x, b)
         if b == 1
             x.colour[black].spaces = x.colour[black].spaces + 1
@@ -472,6 +472,13 @@ function score!{N}(x::Score, s::Space{N})
     foldl(f, x, s.border)
     b, w = x.colour[black], x.colour[white]
     x.total = b.prisoners + b.spaces - (w.prisoners + w.spaces)
+    # add in known-dead groups
+#    for (sz, lv) in zip(g.size, g.lives)
+#        if lv == 1
+#            # the prisoners + the space
+#            x.total += sz * 2
+#        end
+#    end
     # two measures of progress
     x.stones = count(x -> x == 0, s.border)
     x.owned = b.spaces + w.spaces
@@ -546,7 +553,7 @@ function move!{N}(p::Position{N}, t::Point, x, y)
     calculate_lives!(p.groups)
     fix_space!(p.space, p.board)
     assert_alive(p, x, y)
-    score!(p.score, p.space)
+    score!(p.score, p.space, p.groups)
     p   # support call with new instance
 end
 
@@ -612,6 +619,5 @@ function ko{N}(h::Vector{Position{N}}, t::Point, x, y)
             end
         end
     end
-    candidate && println("ko!")
     return candidate
 end

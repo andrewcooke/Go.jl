@@ -1,7 +1,7 @@
 
 const survival = 0.5
 
-function evolve(population, board_size, max_moves, lazy, nplays, nrounds, path, algorithm)
+function evolve(population, board_size, max_moves, nplays, nrounds, path)
     known = Set{UInt64}()
     exists(path) && rm(path)
     dump(known, path, population)
@@ -10,9 +10,8 @@ function evolve(population, board_size, max_moves, lazy, nplays, nrounds, path, 
         for j in 1:nplays
             a, b = pick_competitors(length(population))
             # seed below counts from 1 and can be reproduced from the log
-            srand(algorithm, j+(i-1)*nplays)
             result = play(population[a], population[b], board_size, max_moves,
-                          lazy, algorithm, null_display)
+                          j+(i-1)*nplays, null_display)
 #            result = play(population[a], population[b], algorithm, board_display)
             display_result(i, nrounds, j, nplays, population, a, b, result)
             apply_result!(population, a, b, result)
@@ -242,12 +241,14 @@ end
 
 function undump(path)
     named = Dict{AbstractString, Vector{UInt8}}()
+    ordered = Vector{UInt8}[]
     open(path, "r") do io
         for line in eachline(io)
             name, data = split(line, ":")
-            named[name] = hex2bytes(data[1:end-1])  # drop newline
+            net = hex2bytes(data[1:end-1])  # drop newline
+            named[name] = net
+            push!(ordered, net)
         end
     end
-    named
+    (named, reverse(ordered))
 end
-

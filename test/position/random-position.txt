@@ -28,4 +28,4 @@
                O      __    __    02  
                  O                  0a
 
- -31  [black  pr=0  sp=0  ] [white  pr=27 sp=4  ]
+ 15  [black  pr=0  sp=0  ] [white  pr=27 sp=4  ]
