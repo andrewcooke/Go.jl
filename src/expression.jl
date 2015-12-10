@@ -554,7 +554,8 @@ const atom_dict = Dict{Int,ASCIIString}(1 => "zero",
                                         10 => "owner")
 
 const kern_dict = Dict{Int,ASCIIString}(1 => "point",
-                                        2 => "flood")
+                                        2 => "flood",
+                                        3 => "owner")
 
 function lookup_name(input, n, given, dict)
     if input > given
