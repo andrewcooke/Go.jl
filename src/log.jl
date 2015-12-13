@@ -28,7 +28,6 @@ abstract Birth <: Event
 
 immutable VirginBirth <: Birth
     id::Individual
-    VirginBirth(id) = new(Individual(id))
 end
 
 immutable SingleParentBirth <: Birth
@@ -55,6 +54,45 @@ end
 
 type Death <: Event
     id::Individual
+end
+
+
+function prune(events)
+
+    deletes = Int[]
+    uses = Dict{Individual, Int}()
+    births = Dict{Individual, Int}()
+
+    for (i, event) in enumerate(events)
+        if isa(event, Birth)
+            @assert !haskey(uses, event.id)
+            uses[event.id] = 0
+            births[event.id] = i
+        elseif isa(event, Challenge)
+            uses[event.won] += 1
+            uses[event.lost] += 1
+        else
+            @assert isa(event, Death)
+            if uses[event.id] == 0
+                push!(deletes, i)
+                push!(deletes, births[event.id])
+            end
+            delete!(uses, event.id)
+            delete!(births, event.id)
+        end
+    end
+
+    # pending unused
+    for id in keys(births)
+        if uses[id] == 0
+            push!(deletes, births[id])
+        end
+    end
+
+    sort!(deletes)
+    deleteat!(events, deletes)
+    println("pruned $(length(deletes)) unusued events")
+    events
 end
 
 
@@ -101,7 +139,7 @@ function parse_line(events, population, line, n, fraction)
             id = pop!(population)
             push!(events, Death(id))
         end
-        println("died back to $(length(events))")
+        println("died back to $(length(events))/$(length(population))")
 
     else
         println("?: $(line)")
@@ -115,8 +153,8 @@ function parse_log(log_path, dump_path, n, fraction)
 
     # take initial population from dump
     for expression in undump(dump_path)[2][1:n]
-        push!(events, VirginBirth(name(expression)))
-        push!(population, events[end].id)
+        push!(population, Individual(name(expression)))
+        push!(events, VirginBirth(population[end]))
     end
 
     open(log_path, "r") do io
@@ -137,5 +175,5 @@ function parse_log(log_path, dump_path, n, fraction)
         end
     end
 
-    events
+    prune(events)
 end
