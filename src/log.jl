@@ -52,6 +52,12 @@ immutable SuccessfulChallenge <: Challenge
     lost::Individual
 end
 
+# constructed later, by merging FailedChallenge and Death
+immutable FinalFailedChallenge <: Challenge
+    won::Individual
+    lost::Individual
+end
+
 type Death <: Event
     id::Individual
 end
@@ -62,6 +68,7 @@ function prune(events)
     deletes = Int[]
     uses = Dict{Individual, Int}()
     births = Dict{Individual, Int}()
+    failures = Dict{Individual, Int}()
 
     for (i, event) in enumerate(events)
         if isa(event, Birth)
@@ -71,14 +78,23 @@ function prune(events)
         elseif isa(event, Challenge)
             uses[event.won] += 1
             uses[event.lost] += 1
+            if isa(event, FailedChallenge)
+                failures[event.lost] = i
+            end
         else
             @assert isa(event, Death)
             if uses[event.id] == 0
                 push!(deletes, i)
                 push!(deletes, births[event.id])
+            elseif haskey(failures, event.id)
+                j = failures[event.id]
+                failure = events[j]
+                events[j] = FinalFailedChallenge(failure.won, failure.lost)
+                push!(deletes, i)
             end
             delete!(uses, event.id)
             delete!(births, event.id)
+            delete!(failures, event.id)
         end
     end
 
