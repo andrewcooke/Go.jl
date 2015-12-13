@@ -250,5 +250,5 @@ function undump(path)
             push!(ordered, net)
         end
     end
-    (named, reverse(ordered))
+    (named, ordered)
 end

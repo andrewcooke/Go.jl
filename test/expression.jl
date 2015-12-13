@@ -29,7 +29,7 @@ end
 p = Position{9}()
 move!(p, black, 3, 3)
 e = Go.Expression()
-push!(e, Go.pack_kernel(3, 0, (1, 1), ones(Int, 1, 1)))
+push!(e, Go.pack_kernel(3, 0, (1, 1), 0, ones(Int, 1, 1)))
 d = fix(evaluate(e, p, black))
 compare("expression/given-kernel-1.txt", d)
 
@@ -37,7 +37,7 @@ p = Position{9}()
 move!(p, black, 3, 3)
 move!(p, white, 7, 7)
 e = Go.Expression()
-push!(e, Go.pack_kernel(3, 0, (1, 1), [0 0; 0 0; 0 1]))
+push!(e, Go.pack_kernel(3, 0, (1, 1), 0, [0 0; 0 0; 0 1]))
 d = fix(evaluate(e, p, black))
 compare("expression/given-kernel-2.txt", d)
 
@@ -60,7 +60,7 @@ end
 
 e = Go.Expression()
 push!(e, Go.pack_addition((Go.given_atom+1, 1, false)))
-push!(e, Go.pack_kernel(1, 0.0, (1,1), [-1 1; 0 0]))
+push!(e, Go.pack_kernel(1, 0.0, (1,1), 0, [-1 1; 0 0]))
 dump_expression(Go.pack_expression(e))
 
 for i in 1:100

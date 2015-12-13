@@ -4,7 +4,8 @@ module Go
 export fix, exists,
        black, empty, white, other, point, Position, IllegalMove, move!,
        evaluate, random_expression, moves,
-       evolve, Direct, undump, replay_direct, dump_expression
+       evolve, Direct, undump, replay_direct, dump_expression,
+       parse_log
 
 using AutoHashEquals
 using StatefulIterators
@@ -21,5 +22,6 @@ include("position.jl")
 include("expression.jl")
 include("play.jl")
 include("evolution.jl")
+include("log.jl")
 
 end

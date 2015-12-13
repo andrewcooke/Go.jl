@@ -49,9 +49,10 @@
 #     byte 0: 
 #       bit 6-7: 0 (kernel tag)
 #       bit 0-5: size in x and y (see code)
-#     byte 1: byte used for input outside board edges
-#     byte 2: (mod size of grid) location of output within the kernel 
-#     byte 3: index into input
+#     byte 1: index into input
+#     byte 2: byte used for input outside board edges
+#     byte 3: (mod size of grid) location of output within the kernel 
+#     byte 4: (mod number of combines) how to combine transforms
 #     remaining bytes as kernel (see below for byte -> float)
 #     all normalised by sqrt(n entries)
 #   10, 11: arithmetic
@@ -84,13 +85,15 @@
 # and then the ordering was reversed, so that the final value is taken
 # from the first fragment defined, and references are to later fragments.
 # this gives more persistence across merges, because early fragments 
-# are not affected by re-interpretatin of modified later fragments.
+# are not affected by re-interpretation of modified later fragments.
 
 
 
 # --- data structuring
 
 
+const kernel_extra = 5
+const arith_extra = 1
 unpack_kernel_size(n::UInt8) = ((n & 0x38) >> 3) + 1, (n & 0x07) + 1
 unpack_arithmetic_size(n::UInt8) = (n & 0x03) + 1
 
@@ -112,6 +115,20 @@ const given_atom = 10
 const given_kern = 3
 const header = map(UInt8, collect("goxp"))
 const lheader = 7   # 4 chars, 1 version, 2 length
+
+const transforms = ([1 0; 0 1], [0 1; -1 0], [-1 0; 0 -1], [0 -1; 1 0],
+                    [1 0; 0 -1], [0 1; 1 0], [-1 0; 0 1], [0 -1; -1 0])
+
+const combines = Dict{Int, Function}(0 => x(p...) = sum(p...) / length(transforms),
+                                     1 => x(p...) = prod(p...),
+                                     2 => x(p...) = maximum(p...) - minimum(p...),
+                                     3 => minimum,
+                                     4 => maximum)
+const combine_names = Dict{Int, ASCIIString}(0 => "average",
+                                             1 => "product",
+                                             2 => "range",
+                                             3 => "max",
+                                             4 => "min")
 
 @enum Operation jump=0 kernel=1 addition=2 product=3 junk=4
 
@@ -212,16 +229,17 @@ function unpack_kernel(f::Fragment, i, index)
     input = index.index[idx]
     edge = b2f(read(e, Int8))
     cy, cx = map(Int, [divrem(read(e) % (nx*ny), nx)...] + [1,1])
+    combine = read(e) % length(combines)
     kernel = reshape([b2f(read(e, Int8)) for i in 1:nx*ny], nx, ny)
-    (input, edge, (cx, cy), kernel)
+    (input, edge, (cx, cy), combine, kernel)
 end
 
 # input is not handled correctly
-function pack_kernel(input, edge, c, coeffs)
+function pack_kernel(input, edge, c, combine, coeffs)
     cx, cy = c
     nx, ny = size(coeffs)
     data = [UInt8(nx-1) << 3 | UInt8(ny-1)]
-    push!(data, UInt8(input-1), f2b(edge), UInt8((cy-1)*nx + cx-1))
+    push!(data, UInt8(input-1), f2b(edge), UInt8((cy-1)*nx + cx-1), UInt8(combine))
     append!(data, reinterpret(UInt8, map(f2b, reshape(coeffs, nx*ny))))
     Fragment(kernel, data, [])
 end
@@ -292,15 +310,15 @@ function unpack_expression(data::Vector{UInt8})
                 n = 1
             else
                 op = kernel
-                n = prod(unpack_kernel_size(tag)) + 4
+                n = prod(unpack_kernel_size(tag)) + kernel_extra
             end
         else
             if tag & 0x40 == 0
                 op = addition
-                n = unpack_arithmetic_size(tag) * 2 + 1
+                n = unpack_arithmetic_size(tag) * 2 + arith_extra
             else
                 op = product
-                n = unpack_arithmetic_size(tag) * 2 + 1
+                n = unpack_arithmetic_size(tag) * 2 + arith_extra
             end
         end
         if n > available(d)
@@ -345,14 +363,14 @@ end
 # --- lazy evaluation
 
 
-function lookup{N}(f, x, y, ox, oy, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t::Point, transform, index::Index)
+function lookup{N}(f, x, y, ox, oy, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t::Point, index::Index)
     
     # evaluate kernels
     if ox != 0 && oy != 0
         if 1 <= x <= N && 1 <= y <= N
             if input > given_kern
                 i = input-given_kern
-                e[i] || evaluate(f, length(f)-i+1, p, t, e, d, transform, index)
+                e[i] || evaluate(f, length(f)-i+1, p, t, e, d, index)
                 b2f(d[x, y, i])
             else
                 if input == 1
@@ -383,7 +401,7 @@ function lookup{N}(f, x, y, ox, oy, e, d::Array{Int8, 3}, input, edge, p::Positi
     else
         if input > given_atom
             i = input-given_atom
-            e[i] || evaluate(f, length(f)-i+1, p, t, e, d, transform, index)
+            e[i] || evaluate(f, length(f)-i+1, p, t, e, d, index)
             b2f(d[x, y, i])
         elseif input == 1
             zero(Float32)
@@ -437,42 +455,44 @@ function lookup{N}(f, x, y, ox, oy, e, d::Array{Int8, 3}, input, edge, p::Positi
     end
 end
 
-function evaluate_jump{N}(f::Vector{Fragment}, idx, p::Position{N}, t::Point, e, d::Array{Int8, 3}, transform, index::Index)
+function evaluate_jump{N}(f::Vector{Fragment}, idx, p::Position{N}, t::Point, e, d::Array{Int8, 3}, index::Index)
     n = length(f)
     input = unpack_jump(f[idx], n-idx)
     @forall i j N begin
-        d[i, j, n-idx+1] = f2b(lookup(f, i, j, 0, 0, e, d, input, 0.0, p, t, transform, index))
+        d[i, j, n-idx+1] = f2b(lookup(f, i, j, 0, 0, e, d, input, 0.0, p, t, index))
     end
     e[n-idx+1] = true
 end
 
-function evaluate_kernel{N}(f::Vector{Fragment}, idx, p::Position{N}, t::Point, e, d::Array{Int8, 3}, transform, index::Index)
-    n = length(f)
-    input, edge, (cx, cy), coeffs = unpack_kernel(f[idx], idx, index)
+function evaluate_kernel{N}(f::Vector{Fragment}, idx, p::Position{N}, t::Point, e, d::Array{Int8, 3}, index::Index)
+    n, nt = length(f), length(transforms)
+    input, edge, (cx, cy), combine, coeffs = unpack_kernel(f[idx], idx, index)
     nx, ny = size(coeffs)
-    my_acc = zeros(Float32, N, N)
+    my_acc = zeros(Float32, N, N, nt)
     @forall i j N begin
-        for di in 1:nx
-            for dj in 1:ny
-                ddi, ddj = [di-cx dj-cy] * transform
-                # the best way to understand this is to draw a picture.
-                # it's basically a coord change from one frame (coeffs)
-                # to the other (data).
-                my_acc[i,j] += coeffs[di, dj] * lookup(f, i+ddi, j+ddj, i, j, e, d, input, edge, p, t, transform, index)
+        for k in 1:nt
+            for di in 1:nx
+                for dj in 1:ny
+                    ddi, ddj = [di-cx dj-cy] * transforms[k]
+                    # the best way to understand this is to draw a picture.
+                    # it's basically a coord change from one frame (coeffs)
+                    # to the other (data).
+                    my_acc[i,j,k] += coeffs[di, dj] * lookup(f, i+ddi, j+ddj, i, j, e, d, input, edge, p, t, index)
+                end
             end
         end
-        d[i, j, n-idx+1] = f2b(my_acc[i, j] / sqrt(nx*ny))
     end
+    d[1:end, 1:end, n-idx+1] = map(f2b, combines[combine](my_acc, 3))
     e[n-idx+1] = true
 end
 
-function evaluate_arithmetic{N}(f::Vector{Fragment}, idx, p::Position{N}, t::Point, e, d::Array{Int8, 3}, g, transform, index::Index)
+function evaluate_arithmetic{N}(f::Vector{Fragment}, idx, p::Position{N}, t::Point, e, d::Array{Int8, 3}, g, index::Index)
     n = length(f)
     coeffs = unpack_addition(f[idx], n-idx)
     my_acc = zeros(Float32, N, N)
     for (input, scale, change) in coeffs
         @forall i j N begin
-            value = lookup(f, i, j, 0, 0, e, d, input, 0.0, p, t, transform, index)
+            value = lookup(f, i, j, 0, 0, e, d, input, 0.0, p, t, index)
             my_acc[i, j] += scale * (change ? g(value) : value)
         end
     end
@@ -482,35 +502,27 @@ function evaluate_arithmetic{N}(f::Vector{Fragment}, idx, p::Position{N}, t::Poi
     e[n-idx+1] = true
 end
 
-function evaluate(f::Vector{Fragment}, i, p::Position, t::Point, e, d::Array{Int8, 3}, transform, index::Index)
+function evaluate(f::Vector{Fragment}, i, p::Position, t::Point, e, d::Array{Int8, 3}, index::Index)
     fragment = f[i]
     if fragment.operation == jump
-        evaluate_jump(f, i, p, t, e, d, transform, index)
+        evaluate_jump(f, i, p, t, e, d, index)
     elseif fragment.operation == kernel
-        evaluate_kernel(f, i, p, t, e, d, transform, index)
+        evaluate_kernel(f, i, p, t, e, d, index)
     elseif fragment.operation == addition
-        evaluate_arithmetic(f, i, p, t, e, d, x -> sin(pi * x / 128), transform, index)
+        evaluate_arithmetic(f, i, p, t, e, d, x -> sin(pi * x / 128), index)
     elseif fragment.operation == product
-        evaluate_arithmetic(f, i, p, t, e, d, x -> 1/x, transform, index)
+        evaluate_arithmetic(f, i, p, t, e, d, x -> 1/x, index)
     end
 end
 
 function evaluate{N}(e::Expression, p::Position{N}, t::Point)
     index = build_index(e)
     n = length(e.fragment)
-    my_acc = zeros(Float32, N, N)
-    # these are the 8 ways that kernels can be evaluated.  if we treat
-    # the numbers as log(prob) then it makes a kind of weird sense
-    # that we are adding these together.
-    for transform in ([1 0; 0 1], [0 1; -1 0], [-1 0; 0 -1], [0 -1; 1 0],
-                      [1 0; 0 -1], [0 1; 1 0], [-1 0; 0 1], [0 -1; -1 0])
-        evaluated = zeros(Bool, n)
-        output_data = zeros(Int8, N, N, n)
-        evaluate(e.fragment, 1, p, t, evaluated, output_data, transform, index)
-        # output is final frame (most complex)
-        my_acc += map(b2f, output_data[:,:,n])
-    end
-    my_acc
+    evaluated = zeros(Bool, n)
+    output_data = zeros(Int8, N, N, n)
+    evaluate(e.fragment, 1, p, t, evaluated, output_data, index)
+    # output is final frame (most complex)
+    map(b2f, output_data[:,:,n])
 end
 
 function evaluate(e::Array{UInt8, 1}, p::Position, t::Point)
@@ -602,9 +614,9 @@ function sketch_kernel(kernel, cx, cy)
 end
 
 function dump_kernel(i, f, index)
-    (input, edge, (cx, cy), kernel) = unpack_kernel(f[i], i, index)
+    (input, edge, (cx, cy), combine, kernel) = unpack_kernel(f[i], i, index)
     input = lookup_name(input, length(f), given_kern, kern_dict)
-    println(" $i kernel($(input))")
+    println(" $i kernel($(combine_names[combine]), $(input))")
     sketch_kernel(kernel, cx, cy)
     filter(int, [input])
 end
