@@ -52,18 +52,25 @@ immutable SuccessfulChallenge <: Challenge
     lost::Individual
 end
 
+immutable Death <: Event
+    id::Individual
+end
+
 # constructed later, by merging FailedChallenge and Death
 immutable FinalFailedChallenge <: Challenge
     won::Individual
     lost::Individual
 end
 
-type Death <: Event
-    id::Individual
+# constructed later, by merging Deaths
+immutable Deaths <: Event
+    ids::Vector{Individual}
 end
 
 
-function prune(events)
+# delete unused individuals completely; megre FailedChallenge and
+# Death to give FinalFailedChallenge
+function prune1(events)
 
     deletes = Int[]
     uses = Dict{Individual, Int}()
@@ -91,6 +98,8 @@ function prune(events)
                 failure = events[j]
                 events[j] = FinalFailedChallenge(failure.won, failure.lost)
                 push!(deletes, i)
+            else
+                println("extra death at $i: $(event)")
             end
             delete!(uses, event.id)
             delete!(births, event.id)
@@ -107,6 +116,36 @@ function prune(events)
 
     sort!(deletes)
     deleteat!(events, deletes)
+
+    println("pruned $(length(deletes)) unusued events")
+    events
+end
+
+# merge Death into Deaths
+function prune2(events)
+
+    deletes = Int[]
+    j = 0
+
+    for (i, event) in enumerate(events)
+        if isa(event, Death)
+            if j == 0
+                j = i
+                events[j] = Deaths([event.id])
+            else
+                push!(deletes, i)
+                push!(events[j].ids, event.id)
+            end
+        else
+            j = 0
+        end
+    end
+
+    sort!(deletes)
+    deleteat!(events, deletes)
+
+    @assert length(filter(x -> isa(x, Death), events)) == 0
+
     println("pruned $(length(deletes)) unusued events")
     events
 end
@@ -191,5 +230,11 @@ function parse_log(log_path, dump_path, n, fraction)
         end
     end
 
-    prune(events)
+    prune1(events)
+    prune2(events)
+end
+
+
+# this assumes pruned events
+function plot_tramlines(events)
 end

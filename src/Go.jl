@@ -10,6 +10,7 @@ export fix, exists,
 using AutoHashEquals
 using StatefulIterators
 using SHA
+using Drawing
 
 
 # todo
