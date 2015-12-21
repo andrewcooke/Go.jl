@@ -30,7 +30,7 @@ immutable VirginBirth <: Birth
     id::Individual
 end
 
-immutable SingleParentBirth <: Birth
+immutable OneParentBirth <: Birth
     id::Individual
     parent::Individual
 end
@@ -67,8 +67,13 @@ immutable Deaths <: Event
     ids::Vector{Individual}
 end
 
+# constructed later, by merging VirgniBirths
+immutable VirginBirths <: Event
+    ids::Vector{Individual}
+end
 
-# delete unused individuals completely; megre FailedChallenge and
+
+# delete unused individuals completely; merge FailedChallenge and
 # Death to give FinalFailedChallenge
 function prune1(events)
 
@@ -82,11 +87,23 @@ function prune1(events)
             @assert !haskey(uses, event.id)
             uses[event.id] = 0
             births[event.id] = i
+            if isa(event, OneParentBirth)
+                delete!(failures, event.parent)
+                uses[event.parent] += 1
+            elseif isa(event, TwoParentBirth)
+                delete!(failures, event.parents[1])
+                uses[event.parents[1]] += 1
+                delete!(failures, event.parents[2])
+                uses[event.parents[2]] += 1
+            end
         elseif isa(event, Challenge)
             uses[event.won] += 1
             uses[event.lost] += 1
             if isa(event, FailedChallenge)
                 failures[event.lost] = i
+            else
+                delete!(failures, event.lost)
+                delete!(failures, event.won)
             end
         else
             @assert isa(event, Death)
@@ -98,8 +115,6 @@ function prune1(events)
                 failure = events[j]
                 events[j] = FinalFailedChallenge(failure.won, failure.lost)
                 push!(deletes, i)
-            else
-                println("extra death at $i: $(event)")
             end
             delete!(uses, event.id)
             delete!(births, event.id)
@@ -150,6 +165,21 @@ function prune2(events)
     events
 end
 
+# merge VirginBirth into VirginBirths
+function prune3(events)
+    replacement = VirginBirths(Individual[])
+    i = 1
+    while isa(events[i], VirginBirth)
+        push!(replacement.ids, events[i].id)
+        i += 1
+    end
+    if i > 1
+        splice!(events, 1:i-1, Event[replacement])
+        println("pruned $(i-2) unusued events")
+    end
+    events
+end
+
 
 parent(population, tag) = population[findfirst(id -> id.tag == tag, population)]
 
@@ -167,37 +197,37 @@ function parse_line(events, population, line, n, fraction)
         else
             push!(events, FailedChallenge(a, b))
         end
-        println(events[end])
+#        println(events[end])
 
     elseif (m = match(p_random, line)) != nothing
         parent1 = parent(population, m[:a])  # triggers error on initial junk
         push!(population, Individual(m[:c]))
-        push!(events, SingleParentBirth(population[end], parent1))
-        println(events[end])
+        push!(events, OneParentBirth(population[end], parent1))
+#        println(events[end])
 
     elseif (m = match(p_rotate, line)) != nothing
         parent1 = parent(population, m[:a])
         parent2 = parent(population, m[:x] == m[:y] ? m[:z] : m[:y])
         push!(population, Individual(m[:c]))
         push!(events, TwoParentBirth(population[end], (parent1, parent2)))
-        println(events[end])
+#        println(events[end])
 
     elseif (m = match(p_merge, line)) != nothing
         parent1 = parent(population, m[:a])
         parent2 = parent(population, m[:b])
         push!(population, Individual(m[:c]))
         push!(events, TwoParentBirth(population[end], (parent1, parent2)))
-        println(events[end])
+#        println(events[end])
 
     elseif match(p_temp, line) != nothing
         for i in 1:Int(fraction * n)
             id = pop!(population)
             push!(events, Death(id))
         end
-        println("died back to $(length(events))/$(length(population))")
+#        println("died back to $(length(events))/$(length(population))")
 
     else
-        println("?: $(line)")
+#        println("?: $(line)")
     end
 end
 
@@ -232,9 +262,190 @@ function parse_log(log_path, dump_path, n, fraction)
 
     prune1(events)
     prune2(events)
+    prune3(events)
 end
 
+
+type PlotState
+    max_pop::Int
+    rows::Int
+    cols::Int
+    row::Int
+    col::Int
+    colours::Dict{Individual, C.Colorant}
+    PlotState(max_pop, rows, cols) = new(max_pop, rows, cols, 0, 0,
+                                         Dict{Individual, C.Colorant}())
+end
+
+show(io::IO, s::PlotState) = show(io, "PlotState($(s.max_pop),$(s.col)/$(s.cols),$(s.row)/$(s.rows))")
+
+function max_pop(events)
+    n, m = 0, 0
+    for event in events
+        if isa(event, VirginBirths)
+            n += length(event.ids)
+        elseif isa(event, Birth)
+            n += 1
+        elseif isa(event, Deaths)
+            n -= length(event.ids)
+        elseif isa(event, Death)
+            n -= 1
+        elseif isa(event, FinalFailedChallenge)
+            n -= 1
+        end
+        m = max(n, m)
+    end
+    m
+end
+
+function make_state(events, ratio, min_scale, min_axis)
+    nx = length(events)
+    ny = max_pop(events)
+    rows = max(1, Int(fld(sqrt(nx * ny / ratio), ny)))
+    cols = Int(cld(nx, rows)) + 1
+    s = PlotState(ny, rows, cols)
+    n = max(min_scale * cols, min_axis / 1.2)
+    scale = n / cols
+    m = scale * ny * rows + 0.2 * n
+    n = n + 0.2 * n
+    println("($(nx),$(ny)) -> $s, ($n, $m), $(scale)")
+    s, n, m
+end
+
+function expand!(p::Vector{Vector{Individual}}, e::Birth)
+    popn = copy(p[end])
+    push!(popn, e.id)
+    push!(p, popn)
+end
+
+function expand!(p::Vector{Vector{Individual}}, e::VirginBirths)
+    popn = isempty(p) ? Individual[] : copy(p[end])
+    for id in e.ids
+        push!(popn, id)
+    end
+    push!(p, popn)
+end
+
+function expand!(p::Vector{Vector{Individual}}, e::Deaths)
+    popn = copy(p[end])
+    for id in e.ids
+        i = findfirst(popn, id)
+        splice!(popn, i:i)
+    end
+    push!(p, popn)
+end
+
+function expand!(p::Vector{Vector{Individual}}, e::SuccessfulChallenge)
+    popn = copy(p[end])
+    i = findfirst(popn, e.lost)
+    j = findfirst(popn, e.won)
+    popn[i+1:j] = popn[i:j-1]
+    popn[i] = e.won
+    push!(p, popn)
+end
+
+function expand!(p::Vector{Vector{Individual}}, e::FailedChallenge)
+    popn = copy(p[end])
+    push!(p, popn)
+end
+
+function expand!(p::Vector{Vector{Individual}}, e::FinalFailedChallenge)
+    popn = copy(p[end])
+    i = findfirst(popn, e.lost)
+    popn[i:end-1] = popn[i+1:end]
+    pop!(popn)
+    push!(p, popn)
+end
+
+function break!(e, s::PlotState)
+    for i in 1:(s.rows-1)
+        splice!(e, i*(s.cols-1):i*(s.cols-1)-1, [VirginBirths(Individual[])])
+    end
+end
+
+function grey!(s, popn)
+    for p in popn
+        for id in p
+            if !haskey(s.colours, id)
+                s.colours[id] = parse(C.Colorant, "grey")
+            end
+        end
+    end
+end
 
 # this assumes pruned events
-function plot_tramlines(events)
+function plot_tramlines(events, path; ratio=1.5, min_scale=2, min_axis=1000)
+    s, nx, ny = make_state(events, ratio, min_scale, min_axis)
+    break!(events, s)
+    popn = Vector{Vector{Individual}}()
+    for e in events
+        expand!(popn, e)
+    end
+    popn2 = copy(popn)
+    splice!(popn2, 1:0, popn2[1:1])
+    popn2[1] = Individual[]
+    grey!(s, popn)
+    D.with(D.PNG(path, ceil(Int, nx), ceil(Int, ny)),
+           D.Axes(scale=s.rows*s.max_pop)) do
+        for (b, e, a) in zip(popn2, events, popn)
+            plot(s, b, e, a)
+        end
+    end
 end
+
+gety(s, i) = (s.rows - (s.row-1)) * s.max_pop - i
+
+function plot_step(s, b, a)
+    s.col += 1
+    for id in a
+        plot_step(s, s.colours[id], findfirst(b, id), findfirst(a, id))
+    end    
+end
+
+function plot_step(s, c, i, j)
+    if i > 0 && j > 0
+        x = s.col
+        D.draw(D.Ink(c), D.Pen(0.5)) do
+            D.move(x-1, gety(s, i))
+            D.line(x, gety(s, j))
+        end
+    end
+end
+
+plot(s, b, e::SuccessfulChallenge, a) = plot_step(s, a, b)
+
+function plot(s, b, e::FailedChallenge, a)
+    plot_step(s, b, a)
+    plot_step(s, s.colours[e.lost], findfirst(b, e.lost), findfirst(a, e.won))
+end
+
+function plot(s, b, e::FinalFailedChallenge, a)
+    plot_step(s, b, a)
+    plot_step(s, s.colours[e.lost], findfirst(b, e.lost), findfirst(a, e.won))
+end
+
+function plot(s, b, e::TwoParentBirth, a)
+    plot_step(s, b, a)
+    i = findfirst(b, e.parents[1])
+    j = findfirst(b, e.parents[2])
+    i, j = i > j ? (j, i) : (i, j)
+    x = s.col
+    D.draw(D.Ink(s.colours[e.id]), D.Pen(0.5)) do
+        D.move(x-1, gety(s, i))
+        D.line(x-1, gety(s, j))
+        D.line(x, gety(s, findfirst(a, e.id)))
+    end
+end
+
+function plot(s, b, e::OneParentBirth, a)
+    plot_step(s, b, a)
+    plot_step(s, s.colours[e.id], findfirst(b, e.parent), findfirst(a, e.id))
+end
+
+function plot(s, b, e::VirginBirths, a)
+    s.row += 1
+    s.col = 1
+end
+
+plot(s, b, e::Deaths, a) = plot_step(s, b, a)
+

@@ -363,95 +363,58 @@ end
 # --- lazy evaluation
 
 
-function lookup{N}(f, x, y, ox, oy, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t::Point, index::Index)
+function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t::Point, index::Index)
     
-    # evaluate kernels
-    if ox != 0 && oy != 0
-        if 1 <= x <= N && 1 <= y <= N
-            if input > given_kern
-                i = input-given_kern
-                e[i] || evaluate(f, length(f)-i+1, p, t, e, d, index)
-                b2f(d[x, y, i])
+    if input == 4
+        zero(Float32)
+    elseif input == 5
+        one(Float32)
+    elseif input == 6
+        Float32(p.score.total * Int(t))
+    elseif input == 7
+        Float32(p.score.owned / (N*N - p.score.stones))
+    elseif input == 8
+        p.score.stones
+    elseif 1 <= x <= N && 1 <= y <= N
+        if input == 1
+            # -1 for "our" colour, 0 for space, 1 for opponent's colour
+            Float32(-1 * Int(t) * Int(point(p, x, y)))
+        elseif input == 2
+            # distance to nearest stone (-ve for opponent's colour)
+            Float32(Int(t) * p.flood.distance[x, y])
+        elseif input == 3
+            # -1 if owned by us, 1 owned by opponent, 0 otherwise
+            b = p.space.border[x, y]
+            if b == 0 || b == 3
+                zero(Float32)
+            elseif b == border_mask(t)
+                -one(Float32)
             else
-                if input == 1
-                    # -1 for "our" colour, 0 for space, 1 for opponent's colour
-                    Float32(-1 * Int(t) * Int(point(p, x, y)))
-                elseif input == 2
-                    # distance to nearest stone (-ve for opponent's colour)
-                    Float32(Int(t) * p.flood.distance[x, y])
-                elseif input == 3
-                    # -1 if owned by us, 1 owned by opponent, 0 otherwise
-                    b = p.space.border[x, y]
-                    if b == 0 || b == 3
-                        zero(Float32)
-                    elseif b == border_mask(t)
-                        -one(Float32)
-                    else
-                        one(Float32)
-                    end
-                end
+                one(Float32)
             end
-        elseif 0 <= x <= N+1 && 0 <= y <= N+1
-            edge
+        elseif input == 9
+            i = p.groups.index[x, y]
+            if i > 0
+                Float32(p.groups.size[i])
+            else
+                edge
+            end
+        elseif input == 10
+            i = p.groups.index[x, y]
+            if i > 0
+                Float32(p.groups.lives[i])
+            else
+                edge
+            end
         else
-            0
-        end
-        
-    # evaluate single values
-    else
-        if input > given_atom
             i = input-given_atom
             e[i] || evaluate(f, length(f)-i+1, p, t, e, d, index)
             b2f(d[x, y, i])
-        elseif input == 1
-            zero(Float32)
-        elseif input == 2
-            one(Float32)
-        elseif input == 3
-            Float32(p.score.total * Int(t))
-        elseif input == 4
-            Float32(p.score.owned / (N*N - p.score.stones))
-        elseif input == 5
-            p.score.stones
-            
-        # other atomic values depend on location
-        else
-            if 1 <= x <= N && 1 <= y <= N
-                if input == 6
-                    Float32(-1 * Int(t) * Int(point(p, x, y)))
-                elseif input == 7
-                    i = p.groups.index[x, y]
-                    if i > 0
-                        Float32(p.groups.size[i])
-                    else
-                        edge
-                    end
-                elseif input == 8
-                    i = p.groups.index[x, y]
-                    if i > 0
-                        Float32(p.groups.lives[i])
-                    else
-                        edge
-                    end
-                elseif input == 9
-                    Float32(Int(t) * p.flood.distance[x, y])
-                elseif input == 10
-                    # 1 if owned by us, -1 owned by opponent, 0 otherwise
-                    b = p.space.border[x, y]
-                    if b == 0 || b == 3
-                        zero(Float32)
-                    elseif b == border_mask(t)
-                        one(Float32)
-                    else
-                        -one(Float32)
-                    end
-                end
-            elseif 0 <= x <= N+1 && 0 <= y <= N+1
-                edge
-            else
-                0
-            end
         end
+    elseif 0 <= x <= N+1 && 0 <= y <= N+1
+        edge
+    else
+        0
     end
 end
 
@@ -459,7 +422,7 @@ function evaluate_jump{N}(f::Vector{Fragment}, idx, p::Position{N}, t::Point, e,
     n = length(f)
     input = unpack_jump(f[idx], n-idx)
     @forall i j N begin
-        d[i, j, n-idx+1] = f2b(lookup(f, i, j, 0, 0, e, d, input, 0.0, p, t, index))
+        d[i, j, n-idx+1] = f2b(lookup(f, i, j, e, d, input, 0.0, p, t, index))
     end
     e[n-idx+1] = true
 end
@@ -477,7 +440,7 @@ function evaluate_kernel{N}(f::Vector{Fragment}, idx, p::Position{N}, t::Point, 
                     # the best way to understand this is to draw a picture.
                     # it's basically a coord change from one frame (coeffs)
                     # to the other (data).
-                    my_acc[i,j,k] += coeffs[di, dj] * lookup(f, i+ddi, j+ddj, i, j, e, d, input, edge, p, t, index)
+                    my_acc[i,j,k] += coeffs[di, dj] * lookup(f, i+ddi, j+ddj, e, d, input, edge, p, t, index)
                 end
             end
         end
@@ -492,7 +455,7 @@ function evaluate_arithmetic{N}(f::Vector{Fragment}, idx, p::Position{N}, t::Poi
     my_acc = zeros(Float32, N, N)
     for (input, scale, change) in coeffs
         @forall i j N begin
-            value = lookup(f, i, j, 0, 0, e, d, input, 0.0, p, t, index)
+            value = lookup(f, i, j, e, d, input, 0.0, p, t, index)
             my_acc[i, j] += scale * (change ? g(value) : value)
         end
     end
@@ -554,26 +517,22 @@ end
 
 # --- analysis
 
-const atom_dict = Dict{Int,ASCIIString}(1 => "zero",
-                                        2 => "one",
-                                        3 => "score",
-                                        4 => "owned%",
-                                        5 => "stones%",
-                                        6 => "point",
-                                        7 => "size",
-                                        8 => "lives",
-                                        9 => "flood",
-                                        10 => "owner")
+const lookup_dict = Dict{Int,ASCIIString}(4 => "zero",
+                                          5 => "one",
+                                          6 => "score",
+                                          7 => "owned%",
+                                          8 => "stones%",
+                                          1 => "point",
+                                          2 => "flood",
+                                          3 => "owner",
+                                          9 => "size",
+                                          10 => "lives")
 
-const kern_dict = Dict{Int,ASCIIString}(1 => "point",
-                                        2 => "flood",
-                                        3 => "owner")
-
-function lookup_name(input, n, given, dict)
+function lookup_name(input, n, given)
     if input > given
         n-(input - given)+1
     else
-        dict[input]
+        lookup_dict[input]
     end
 end
 
@@ -581,7 +540,7 @@ int(x) = typeof(x) <: Integer
 
 function dump_jump(i, f)
     n = length(f)
-    input = lookup_name(unpack_jump(f[i], n-i), n, given_atom, atom_dict)
+    input = lookup_name(unpack_jump(f[i], n-i), n, given_atom)
     println(" $i jump to $(input)")
     filter(int, [input])
 end
@@ -615,20 +574,20 @@ end
 
 function dump_kernel(i, f, index)
     (input, edge, (cx, cy), combine, kernel) = unpack_kernel(f[i], i, index)
-    input = lookup_name(input, length(f), given_kern, kern_dict)
+    input = lookup_name(input, length(f), given_kern)
     println(" $i kernel($(combine_names[combine]), $(input))")
     sketch_kernel(kernel, cx, cy)
     filter(int, [input])
 end
 
-term2str(n, input, scale, change) = string("$(scale)*$(lookup_name(input, n, given_atom, atom_dict))", change ? "!" : "")
+term2str(n, input, scale, change) = string("$(scale)*$(lookup_name(input, n, given_atom))", change ? "!" : "")
 
 function dump_arithmetic(i, f, op)
     n = length(f)
     terms = unpack_arithmetic(f[i], n-i)
     expr = join(map(x -> term2str(n, x...), terms), " $op ")
     println(" $i $expr")
-    filter(int, map(x -> lookup_name(x[1], n, given_atom, atom_dict), terms))
+    filter(int, map(x -> lookup_name(x[1], n, given_atom), terms))
 end
 
 function dump_fragment(i, f, used, index)

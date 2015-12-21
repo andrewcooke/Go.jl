@@ -5,12 +5,14 @@ export fix, exists,
        black, empty, white, other, point, Position, IllegalMove, move!,
        evaluate, random_expression, moves,
        evolve, Direct, undump, replay_direct, dump_expression,
-       parse_log
+       parse_log, plot_tramlines
 
 using AutoHashEquals
 using StatefulIterators
 using SHA
-using Drawing
+import Drawing; D = Drawing
+import ColorTypes; C = ColorTypes
+import Base.show
 
 
 # todo

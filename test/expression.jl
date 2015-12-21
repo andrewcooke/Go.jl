@@ -69,3 +69,25 @@ for i in 1:100
     m = moves(e, [p], black, MersenneTwister(1))
     @test m == moves(e, [p], black, MersenneTwister(1))
 end
+
+# bug while running - 43a15a544bcce289 at 1005
+#43a15a544bcce289:2
+# 1 kernel(average, 23)
+# -@
+# 23 kernel(min, 25)
+# ++  +
+#--+ - 
+#+++-O 
+#+- --+
+# 25 jump to score
+
+encoded = "676f7870009701505dc1148702a45c88945f8e861e26239ac88d42e4847700e755b0ebeb77fe08812d2db9c809347d8e19ed40e042d2656ed6edb7cf7527670fe3bf122814793f6fb524101c5131d8584a1639deec0de1cf38601cdf65acbd4e72fe15706c030a05514e9ea9c7d23618ffcb145154c795e3458dba80337d693028c204f0e8c803f52ade5c5174c796cb491d1a68347529902831d8756a1039defc1c1a6834ddcb6bb424106dd8305d0d257097cc351db504693a3d8ac21b3f9de7d5b0eaeb55fe08a1296db9cc89347d86192dc0c842c3456ed6871837438a988d06ae867600e755b0abeb5576aab1397fb9fc15706c830a855139defc1de1cf38601cdf652cbd0e72fe15706c030a05514e9ea9c7d23618ffcb145154c795e3458dba80333d69302a8204f0e8c803f52bde1c5174c796cb491d1268b47529902831d8756a1039defc1c1268345dcb6bb425106dd8385d0d2570978c351db504697a3dcac21b379de7d5b06beb57fe08eb7acea691b3b11030077596727f4e6c5dc030354ced8b44993f541960979e351dbf2469fa9c30"
+e = Go.Expression(hex2bytes(encoded))
+dump_expression(e)
+println(length(e.fragment))
+index = Go.build_index(e)
+println(index)
+println(e.fragment[23])
+println(Go.unpack_kernel(e.fragment[23], 23, index))
+println(e.fragment[25])
+println(Go.unpack_jump(e.fragment[25], length(e.fragment)-25))
