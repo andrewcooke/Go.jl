@@ -59,15 +59,19 @@ function prune!(events, id)
     deleted, positive, i = 0, false, length(events)
     while i > 0
         e = events[i]
-        if isa(e, VirginBirths) && id in e.ids && ! positive
-            delete!(e.ids, findfirst(e.ids, id))
+        if isa(e, VirginBirths) && id in e.ids
+            if ! positive
+                delete!(e.ids, findfirst(e.ids, id))
+            end
             return
-        elseif is(e, Birth) && e.id == id && ! positive
-            delete!(events, i)
+        elseif isa(e, Birth) && e.id == id
+            if ! positive
+                delete!(events, i)
+            end
             return
-        elseif is(e, Birth) && id in e.parents && ! positive
+        elseif isa(e, Birth) && id in e.parents
             j = findfirst(e.parents, id)
-            e.deaths[j] = true
+            e.deaths[j] = ! positive
             positive = true
         elseif isa(e, FailedChallenge) && (e.lost == id || e.won == id)
             delete!(events, i)
@@ -96,11 +100,13 @@ function prune!(events)
                 push!(ids, id)
                 n = length(events)
                 prune!(events, id)
-                deleted += n - length(events)
+                n -= length(events)
+                deleted += n
             end
         end
         i = min(i-1, length(events))
     end
+    println("deleted $(deleted)")
     deleted
 end
 
@@ -303,6 +309,7 @@ function plot_tramlines(events, path; ratio=1.5, min_scale=2, min_axis=1000)
         expand!(popn, e)
     end
     mp = maximum(map(length, popn)) 
+    println("$((mp, s.max_pop))")
     @assert mp == s.max_pop (mp, s.max_pop)
     grey!(s, popn)
     D.with(D.PNG(path, ceil(Int, nx), ceil(Int, ny)),
