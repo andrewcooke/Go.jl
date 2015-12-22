@@ -342,7 +342,7 @@ end
 function plot(s, b, e::Birth, a)
     plot_step(s, b, a)
     if length(e.parents) == 1
-        plot_step(s, s.colours[e.id], findfirst(b, e.parent[1]), findfirst(a, e.id))
+        plot_step(s, s.colours[e.id], findfirst(b, e.parents[1]), findfirst(a, e.id))
     else
         i = findfirst(b, e.parents[1])
         j = findfirst(b, e.parents[2])
