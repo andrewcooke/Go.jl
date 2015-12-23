@@ -12,6 +12,7 @@ using StatefulIterators
 using SHA
 import Drawing; D = Drawing
 import ColorTypes; C = ColorTypes
+using ColorVectorSpace
 import Base.show, Base.delete!
 
 

@@ -294,7 +294,7 @@ end
 
 function break!(e, p, s::PlotState)
     for i in 1:(s.rows-1)
-        j = i*(s.cols-1)
+        j = i*s.cols
         splice!(e, j:j-1, [VirginBirths(Individual[])])
         splice!(p, j:j-1, Vector{Individual}[p[j]])
     end
@@ -317,7 +317,7 @@ function rshift(popn)
     popn2
 end
 
-function plot_tramlines(events, path; ratio=1.5, min_scale=2, min_axis=1000)
+function plot_tramlines(events, path; ratio=1.4, min_scale=2, min_axis=1000)
 
     popn = Vector{Vector{Individual}}()
     for e in events
@@ -331,7 +331,7 @@ function plot_tramlines(events, path; ratio=1.5, min_scale=2, min_axis=1000)
     grey!(s, popn)
     D.with(D.PNG(path, ceil(Int, nx), ceil(Int, ny)),
            D.Axes(scale=(s.cols, s.rows*s.max_pop)),
-           D.Pen(0.1; cap="round", join="round")) do
+           D.Pen(0.2; cap="round", join="round")) do
         for (b, e, a) in zip(rshift(popn), events, popn)
             plot(s, b, e, a)
         end
@@ -351,7 +351,7 @@ function plot_step(s, c, i, j)
     if i > 0 && j > 0
         x = s.col
         yi, yj = gety(s, i), gety(s, j)
-        D.draw(D.Ink(c), D.Pen(0.2)) do
+        D.draw(D.Ink(c)) do
             D.move(x-1, yi)
             if abs(yi - yj) > 1
                 D.line(x-0.5, yi+0.5)
@@ -364,23 +364,25 @@ end
 
 plot(s, b, e::SuccessfulChallenge, a) = plot_step(s, b, a)
 
+fade(c) = D.WHITE - 0.5 * (D.WHITE - c)
+
 function plot(s, b, e::Birth, a)
     x = s.col
-    ys = map(id -> gety(s, findfirst(b, id)), e.parents)
-    D.draw(D.Ink(C.RGB(0.7, 0.7, 0.7)), D.Pen(0.2)) do
-        ya = gety(s, findfirst(a, e.id))
-        for y in ys
-            D.move(x, y)
-            if y-ya > 0.1
-                D.line(x+0.5, y-0.5)
+    ya = gety(s, findfirst(a, e.id))
+    for id in e.parents
+        yb = gety(s, findfirst(b, id))
+        D.draw(D.Ink(fade(s.colours[id]))) do
+            D.move(x, yb)
+            if yb-ya > 0.1
+                D.line(x+0.5, yb-0.5)
                 D.line(x+0.5, ya+0.5)
                 D.line(x+1, ya)
-            elseif y-ya < -0.1
-                D.line(x+0.5, y+0.5)
+            elseif yb-ya < -0.1
+                D.line(x+0.5, yb+0.5)
                 D.line(x+0.5, ya-0.5)
                 D.line(x+1, ya)
             else
-                D.line(x+1, y)
+                D.line(x+1, ya)
             end
         end
     end
