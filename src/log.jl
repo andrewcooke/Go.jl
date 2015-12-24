@@ -1,4 +1,11 @@
 
+# this file used something like:
+
+# julia-0.4 -e 'using Go; e = parse_log("evol-1.log", "evol-1.dump", 50, 0.5; limit=-1); plot_tramlines(e, "go.png"; min_axis=1900, tint=highlight("05f051414412588b"))'
+
+# where the highlight tag is typically a recent, high scoring individual
+
+
 const p_challenge = r"^\s*(?P<i>\d+)/(?P<n>\d+)\s+(?P<j>\d+)/(?P<m>\d+) (?P<surprise>(?:!| )) (?P<a>[a-f0-9]+):(?P<x>\d+)\s+(?:bt|dr)\s+(?P<b>[a-f0-9]+):(?P<y>\d+).*$"
 
 # 34 random bytes d1862e709058196a => fddd8634d3f25690
@@ -238,9 +245,11 @@ type PlotState
     cols::Int
     row::Int
     col::Int
-    colours::Dict{Individual, Vector{ColourTable}}
+    colour_index::Dict{Individual, Tuple{Int,Int,Int}}
+    colour_table::Dict{Int, C.Colorant}
     PlotState(max_pop, rows, cols) = new(max_pop, rows, cols, 0, 0,
-                                         Dict{Individual, Vector{ColourTable}}())
+                                         Dict{Individual, Tuple{Int,Int,Int}}(),
+                                         Dict{Int, C.Colorant}())
 end
 
 show(io::IO, s::PlotState) = show(io, "PlotState($(s.max_pop),$(s.col)/$(s.cols),$(s.row)/$(s.rows))")
@@ -303,12 +312,22 @@ function break!(e, p, s::PlotState)
     end
 end
 
+function getc(s, id, k)
+    (b, kk, a) = s.colour_index[id]
+    if k <= kk
+        s.colour_table[b]
+    else
+        s.colour_table[a]
+    end
+end
+
 function grey!(s, popn, events)
     n = length(popn)
+    s.colour_table[0] = INK
     for p in popn
         for id in p
-            if ! haskey(s.colours, id)
-                s.colours[id] = [(n, INK)]
+            if ! haskey(s.colour_index, id)
+                s.colour_index[id] = (0, 0, 0)
             end
         end
     end
@@ -320,11 +339,11 @@ function highlight(tag)
         for k in length(popn):-1:1
             for id in popn[k]
                 if id.tag == tag
-                    return (k, id)
+                    return id
                 end
             end
         end
-        error("$(tag) doe snot exist")
+        error("$(tag) does not exist")
     end
 
     function tint!(s, popn, events)
@@ -339,12 +358,19 @@ function highlight(tag)
 
         grey!(s, popn, events)
 
-        (k, id) = find(popn)
-        queue = Tuple{Int, Int, Individual}[(0, k, id)]
+        id = find(popn)
+        queue = Tuple{Int, Int, Individual}[(1, length(events), id)]
         while length(queue) > 0
             (depth, k, id) = splice!(queue, 1:1)[1]
-            z = 0.97^depth
-            push!(s.colours[id], (k, convert(C.RGB, C.HSV(0.0, z, 0.2+0.8*z))))
+            if ! haskey(s.colour_table, depth)
+                z = 0.95^(depth-1)
+                s.colour_table[depth] = convert(C.RGB{N.UFixed8}, C.HSV(0.0, z, 0.2+0.8*z))
+                print(" $depth,")
+            end
+            c = s.colour_table[depth]
+            if s.colour_index[id] == (0, 0, 0)
+                s.colour_index[id] = (depth, k, 0)
+            end
             (k, parents) = get(births, id, (0, []))
             for p in parents
                 push!(queue, (depth+1, k, p))
@@ -373,11 +399,15 @@ function plot_tramlines(events, path;
     s, nx, ny = make_state(events, max_pop, ratio, min_scale, min_axis)
     break!(events, popn, s)
 
+    dk = ceil(Int, length(events) / 10)
     tint(s, popn, events)
     D.with(D.PNG(path, ceil(Int, nx), ceil(Int, ny)),
            D.Axes(scale=(s.cols, s.rows*s.max_pop)),
            D.Pen(PEN; cap="round", join="round")) do
         for (k, (b, e, a)) in enumerate(zip(rshift(popn), events, popn))
+            if k % dk == 0
+                println("$k/$(length(events))")
+            end
             plot(s, b, e, a, k)
         end
     end
@@ -385,35 +415,33 @@ end
 
 gety(s, i) = (s.rows - (s.row-1)) * s.max_pop - i
 
-function getc(s, id, k)
-    for (n, c) in reverse(s.colours[id])
-        if k <= n
-            return c
-        end
+function plot_step(x, yb, ya)
+    D.move(x, yb)
+    if yb-ya > 0.1
+        D.line(x+0.5, yb-0.5)
+        D.line(x+0.5, ya+0.5)
+        D.line(x+1, ya)
+    elseif yb-ya < -0.1
+        D.line(x+0.5, yb+0.5)
+        D.line(x+0.5, ya-0.5)
+        D.line(x+1, ya)
+    else
+        D.line(x+1, ya)
     end
-    error("no colour for $(id) at $i")
 end
 
 function plot_steps(s, b, a, k)
-    s.col += 1
     for id in a
-        plot_step(s, getc(s, id, k), findfirst(b, id), findfirst(a, id))
-    end    
-end
-
-function plot_step(s, c, i, j)
-    if i > 0 && j > 0
-        x = s.col
-        yi, yj = gety(s, i), gety(s, j)
-        D.draw(D.Ink(c)) do
-            D.move(x-1, yi)
-            if abs(yi - yj) > 1
-                D.line(x-0.5, yi+0.5)
-                D.line(x-0.5, yj-0.5)
+        c, i, j = getc(s, id, k), findfirst(b, id), findfirst(a, id)
+        if i > 0 && j > 0
+            x = s.col
+            yb, ya = gety(s, i), gety(s, j)
+            D.draw(D.Ink(c)) do
+                plot_step(x, yb, ya)
             end
-            D.line(x, yj)
         end
-    end
+    end    
+    s.col += 1
 end
 
 plot(s, b, e::SuccessfulChallenge, a, k) = plot_steps(s, b, a, k)
@@ -426,18 +454,7 @@ function plot(s, b, e::Birth, a, k)
     for id in e.parents
         yb = gety(s, findfirst(b, id))
         D.draw(D.Ink(fade(getc(s, id, k)))) do
-            D.move(x, yb)
-            if yb-ya > 0.1
-                D.line(x+0.5, yb-0.5)
-                D.line(x+0.5, ya+0.5)
-                D.line(x+1, ya)
-            elseif yb-ya < -0.1
-                D.line(x+0.5, yb+0.5)
-                D.line(x+0.5, ya-0.5)
-                D.line(x+1, ya)
-            else
-                D.line(x+1, ya)
-            end
+            plot_step(x, yb, ya)
         end
     end
     plot_steps(s, b, a, k)

@@ -14,6 +14,7 @@ import Drawing; D = Drawing
 import ColorTypes; C = ColorTypes
 using ColorVectorSpace
 import Base.show, Base.delete!
+import FixedPointNumbers; N = FixedPointNumbers
 
 
 # todo
