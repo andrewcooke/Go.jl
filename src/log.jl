@@ -15,6 +15,8 @@ const p_merge = r"^\s*merge \d+ (?P<a>[a-f0-9]+), (?P<b>[a-f0-9]+) => (?P<c>[a-f
 # temp 0.819
 const p_temp = r"\s*temp \d+\.\d+\s*$"
 
+const INK = C.RGB(0.2, 0.2, 0.2)
+const PEN = 0.5
 
 # this is not hashed - each instance is unique, and we can have
 # multiple, distinct instances with the same tag.
@@ -228,6 +230,7 @@ function parse_log(log_path, dump_path, n, fraction; limit=-1)
     prune_type!(events, Deaths)
 end
 
+typealias ColourTable Tuple{Int, C.Colorant}
 
 type PlotState
     max_pop::Int
@@ -235,9 +238,9 @@ type PlotState
     cols::Int
     row::Int
     col::Int
-    colours::Dict{Individual, C.Colorant}
+    colours::Dict{Individual, Vector{ColourTable}}
     PlotState(max_pop, rows, cols) = new(max_pop, rows, cols, 0, 0,
-                                         Dict{Individual, C.Colorant}())
+                                         Dict{Individual, Vector{ColourTable}}())
 end
 
 show(io::IO, s::PlotState) = show(io, "PlotState($(s.max_pop),$(s.col)/$(s.cols),$(s.row)/$(s.rows))")
@@ -300,13 +303,54 @@ function break!(e, p, s::PlotState)
     end
 end
 
-function grey!(s, popn)
+function grey!(s, popn, events)
+    n = length(popn)
     for p in popn
         for id in p
-            if !haskey(s.colours, id)
-                s.colours[id] = C.RGB(0.2, 0.2, 0.2)
+            if ! haskey(s.colours, id)
+                s.colours[id] = [(n, INK)]
             end
         end
+    end
+end
+
+function highlight(tag)
+
+    function find(popn)
+        for k in length(popn):-1:1
+            for id in popn[k]
+                if id.tag == tag
+                    return (k, id)
+                end
+            end
+        end
+        error("$(tag) doe snot exist")
+    end
+
+    function tint!(s, popn, events)
+        print("tinting...")
+
+        births = Dict{Individual, Tuple{Int, Vector{Individual}}}()
+        for (k, e) in enumerate(events)
+            if isa(e, Birth)
+                births[e.id] = (k, e.parents)
+            end
+        end
+
+        grey!(s, popn, events)
+
+        (k, id) = find(popn)
+        queue = Tuple{Int, Int, Individual}[(0, k, id)]
+        while length(queue) > 0
+            (depth, k, id) = splice!(queue, 1:1)[1]
+            z = 0.97^depth
+            push!(s.colours[id], (k, convert(C.RGB, C.HSV(0.0, z, 0.2+0.8*z))))
+            (k, parents) = get(births, id, (0, []))
+            for p in parents
+                push!(queue, (depth+1, k, p))
+            end
+        end
+        println(" done")
     end
 end
 
@@ -317,7 +361,8 @@ function rshift(popn)
     popn2
 end
 
-function plot_tramlines(events, path; ratio=1.4, min_scale=2, min_axis=1000)
+function plot_tramlines(events, path; 
+                        ratio=1.4, min_scale=2, min_axis=1000, tint=grey!)
 
     popn = Vector{Vector{Individual}}()
     for e in events
@@ -328,22 +373,31 @@ function plot_tramlines(events, path; ratio=1.4, min_scale=2, min_axis=1000)
     s, nx, ny = make_state(events, max_pop, ratio, min_scale, min_axis)
     break!(events, popn, s)
 
-    grey!(s, popn)
+    tint(s, popn, events)
     D.with(D.PNG(path, ceil(Int, nx), ceil(Int, ny)),
            D.Axes(scale=(s.cols, s.rows*s.max_pop)),
-           D.Pen(0.2; cap="round", join="round")) do
-        for (b, e, a) in zip(rshift(popn), events, popn)
-            plot(s, b, e, a)
+           D.Pen(PEN; cap="round", join="round")) do
+        for (k, (b, e, a)) in enumerate(zip(rshift(popn), events, popn))
+            plot(s, b, e, a, k)
         end
     end
 end
 
 gety(s, i) = (s.rows - (s.row-1)) * s.max_pop - i
 
-function plot_step(s, b, a)
+function getc(s, id, k)
+    for (n, c) in reverse(s.colours[id])
+        if k <= n
+            return c
+        end
+    end
+    error("no colour for $(id) at $i")
+end
+
+function plot_steps(s, b, a, k)
     s.col += 1
     for id in a
-        plot_step(s, s.colours[id], findfirst(b, id), findfirst(a, id))
+        plot_step(s, getc(s, id, k), findfirst(b, id), findfirst(a, id))
     end    
 end
 
@@ -362,16 +416,16 @@ function plot_step(s, c, i, j)
     end
 end
 
-plot(s, b, e::SuccessfulChallenge, a) = plot_step(s, b, a)
+plot(s, b, e::SuccessfulChallenge, a, k) = plot_steps(s, b, a, k)
 
 fade(c) = D.WHITE - 0.5 * (D.WHITE - c)
 
-function plot(s, b, e::Birth, a)
+function plot(s, b, e::Birth, a, k)
     x = s.col
     ya = gety(s, findfirst(a, e.id))
     for id in e.parents
         yb = gety(s, findfirst(b, id))
-        D.draw(D.Ink(fade(s.colours[id]))) do
+        D.draw(D.Ink(fade(getc(s, id, k)))) do
             D.move(x, yb)
             if yb-ya > 0.1
                 D.line(x+0.5, yb-0.5)
@@ -386,10 +440,10 @@ function plot(s, b, e::Birth, a)
             end
         end
     end
-    plot_step(s, b, a)
+    plot_steps(s, b, a, k)
 end
 
-function plot(s, b, e::VirginBirths, a)
+function plot(s, b, e::VirginBirths, a, k)
     s.row += 1
     s.col = 1
 end
