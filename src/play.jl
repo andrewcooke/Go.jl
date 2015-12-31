@@ -1,4 +1,12 @@
 
+# this file used something like:
+
+# julia-0.4 -e 'using Go; d = undump("evol-1.dump")[1]; replay_direct(d, "514/10000  13/25   cb91577f4ddb175e:1   bt e7d7a5f40ef149a5:2    3 sc  356 mv  24 sp  337 st")'
+
+# where the quoted string is cut+paste from the log
+
+
+
 function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, seed, display)
     passed, t, h = 0, black, [Position{board_size}()]
     rng = MersenneTwister(seed)

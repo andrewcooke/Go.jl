@@ -23,7 +23,7 @@ const p_merge = r"^\s*merge \d+ (?P<a>[a-f0-9]+), (?P<b>[a-f0-9]+) => (?P<c>[a-f
 const p_temp = r"\s*temp \d+\.\d+\s*$"
 
 const INK = C.RGB(0.2, 0.2, 0.2)
-const PEN = 0.5
+const PEN = 0.4
 
 # this is not hashed - each instance is unique, and we can have
 # multiple, distinct instances with the same tag.
@@ -135,22 +135,27 @@ function prune!(events)
         end
         i = min(i-1, length(events))
     end
-    println("deleted $(deleted)")
+    println("deleted $(deleted) (from unsuccessful individuals)")
     deleted
 end
 
 function prune_type!(events, T)
+    count = 0
     for i = length(events):-1:1
         if isa(events[i], T)
             delete!(events, i)
+            count += 1
         end
     end
+    println("deleted $(count) $(T)")
     events
 end
 
 parent(population, tag) = population[findfirst(id -> id.tag == tag, population)]
 
 function parse_line(events, population, line, n, fraction)
+
+    println(line)
 
     if (m = match(p_challenge, line)) != nothing
         x, y = parse(Int, m[:x]), parse(Int, m[:y])
@@ -188,7 +193,7 @@ function parse_line(events, population, line, n, fraction)
 
     elseif match(p_temp, line) != nothing
         push!(events, Deaths(Individual[]))
-        for i in 1:Int(fraction * n)
+        for i in 1:(n - Int(fraction * n))
             id = pop!(population)
             push!(events[end].ids, id)
         end
@@ -232,9 +237,13 @@ function parse_log(log_path, dump_path, n, fraction; limit=-1)
         end
     end
 
+    println("initial $(length(events)) events")
     prune_type!(events, FailedChallenge)
     while prune!(events) > 0 end
     prune_type!(events, Deaths)
+    println("final $(length(events)) events")
+
+    events
 end
 
 typealias ColourTable Tuple{Int, C.Colorant}
@@ -293,8 +302,8 @@ end
 
 function make_state(events, ny, ratio, min_scale, min_axis)
     nx = length(events)
-    rows = max(1, Int(fld(sqrt(nx * ny / ratio), ny)))
-    cols = Int(cld(nx, rows)) + 1
+    rows = max(1, floor(Int, sqrt(nx * ny / ratio) / ny))
+    cols = ceil(Int, nx / rows) + 1
     s = PlotState(ny, rows, cols)
     n = max(min_scale * cols, min_axis / 1.2)
     scale = n / cols
@@ -333,9 +342,9 @@ function grey!(s, popn, events)
     end
 end
 
-function highlight(tag)
+function highlight(tag...)
 
-    function find(popn)
+    function find(tag, popn)
         for k in length(popn):-1:1
             for id in popn[k]
                 if id.tag == tag
@@ -347,7 +356,6 @@ function highlight(tag)
     end
 
     function tint!(s, popn, events)
-        print("tinting...")
 
         births = Dict{Individual, Tuple{Int, Vector{Individual}}}()
         for (k, e) in enumerate(events)
@@ -358,25 +366,37 @@ function highlight(tag)
 
         grey!(s, popn, events)
 
-        id = find(popn)
-        queue = Tuple{Int, Int, Individual}[(1, length(events), id)]
-        while length(queue) > 0
-            (depth, k, id) = splice!(queue, 1:1)[1]
-            if ! haskey(s.colour_table, depth)
-                z = 0.95^(depth-1)
-                s.colour_table[depth] = convert(C.RGB{N.UFixed8}, C.HSV(0.0, z, 0.2+0.8*z))
-                print(" $depth,")
+        for (h, t) in enumerate(tag)
+            println("$h $t")
+            print("tinting...")
+            qcount, pcount = 0, 0
+            id = find(t, popn)
+            queue = Tuple{Int, Int, Individual}[(1, length(events), id)]
+            while length(queue) > 0
+                (depth, k, id) = splice!(queue, 1:1)[1]
+                index = h * 1000 + depth
+                if ! haskey(s.colour_table, index)
+                    z = 0.95^(depth-1)
+                    s.colour_table[index] = convert(C.RGB{N.UFixed8}, C.HSV((h-1) * 60.0, z, 0.2+0.8*z))
+                    print(" $depth,")
+                end
+                c = s.colour_table[index]
+                if s.colour_index[id] == (0, 0, 0)
+                    s.colour_index[id] = (index, k, 0)
+                    pcount += 1
+                end
+                (k, parents) = get(births, id, (0, []))
+                for p in parents
+                    # tweak for efficiency - queue was huge
+                    if s.colour_index[p] == (0, 0, 0)
+                        push!(queue, (depth+1, k, p))
+                        qcount += 1
+                    end
+                end
             end
-            c = s.colour_table[depth]
-            if s.colour_index[id] == (0, 0, 0)
-                s.colour_index[id] = (depth, k, 0)
-            end
-            (k, parents) = get(births, id, (0, []))
-            for p in parents
-                push!(queue, (depth+1, k, p))
-            end
+            println(" done")
+            println("$(qcount) queued; $(pcount) altered")
         end
-        println(" done")
     end
 end
 
@@ -404,12 +424,14 @@ function plot_tramlines(events, path;
     D.with(D.PNG(path, ceil(Int, nx), ceil(Int, ny)),
            D.Axes(scale=(s.cols, s.rows*s.max_pop)),
            D.Pen(PEN; cap="round", join="round")) do
+        print("plotting $(length(events))...")
         for (k, (b, e, a)) in enumerate(zip(rshift(popn), events, popn))
             if k % dk == 0
-                println("$k/$(length(events))")
+                print(" $k,")
             end
             plot(s, b, e, a, k)
         end
+        println(" done")
     end
 end
 
@@ -465,3 +487,38 @@ function plot(s, b, e::VirginBirths, a, k)
     s.col = 1
 end
 
+
+function longest_lived(log_path, dump_path, n1, fraction; limit=-1, n2=-1)
+
+    events = parse_log(log_path, dump_path, n1, fraction; limit=limit)
+    popn = Vector{Vector{Individual}}()
+    for e in events
+        expand!(popn, e)
+    end
+
+    n2 = n2 < 1 ? n1 : n2
+    score = Dict{AbstractString, Float64}()
+    for p in popn
+        for (rank, id) in enumerate(p)
+            if ! haskey(score, id.tag)
+                score[id.tag] = 0.0
+            end
+            score[id.tag] += 1.0 / rank
+        end
+    end
+
+    pairs = [(score[id], id) for id in keys(score)]
+    sort!(pairs; by = x -> x[1], rev=true)
+
+    # read dump fike a second time - inefficient, but used only once
+    named = undump(dump_path)[1]
+    names = map(x -> x[2], pairs[1:n2])
+    expressions = [named[name] for name in names]
+
+    for (i, (name, expression)) in enumerate(zip(names, expressions))
+        println("$(name):$i")
+        dump_expression(expression)
+    end
+    
+    return expressions
+end

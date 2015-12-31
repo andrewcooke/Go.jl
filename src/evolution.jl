@@ -1,5 +1,6 @@
 
-const survival = 0.5
+#const survival = 0.5
+const survival = 0.9
 
 function evolve(population, board_size, max_moves, nplays, nrounds, path)
     known = Set{UInt64}()
@@ -34,7 +35,7 @@ end
 function pick_competitors(n)
     # surprise() below assumes these are ordered
     b = rand(2:n)
-    # biased to top, with one always in surviving half
+    # biased to top, with one always in surviving fraction
     rand(1:min(b-1, Int(survival * n))), b
 end
 
