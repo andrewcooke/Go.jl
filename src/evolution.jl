@@ -180,6 +180,22 @@ function random_bits(fraction)
     end
 end
 
+function random_deltas(fraction)
+    function change(a::Vector{UInt8})
+        b, count = copy(a), 0
+        while b == a
+            for i in lheader+1:length(b)
+                if rand(Float64) < fraction
+                    b[i] = UInt8(mod(b[i] + rand([1,-1]), 0x100))
+                    count += 1
+                end
+            end
+        end
+        println("$(count) random deltas $(name(a)) => $(name(b))")
+        b
+    end
+end
+
 function weighted_rand(ops)
     total = sum([op[1] for op in ops])
     limit = rand(Float64) * total
@@ -194,6 +210,7 @@ end
 function build_ops(length, temp)
     ops = Tuple{Number, Function}[
               (10, x -> random_bits(temp/10)(random_single(x))),
+              (10, x -> random_deltas(temp/10)(random_single(x))),
               (10, x -> merge(biased_pair(x)...)),
               (1, x -> merge_with_rotate_chunks(biased_pair(x)...)),
               (1, x -> random_bytes(temp/10)(random_single(x)))]

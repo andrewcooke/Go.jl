@@ -511,7 +511,8 @@ function moves{N}(e::Array{UInt8, 1}, h::Vector{Position{N}}, t::Point, rng)
     indexed = reshape([(logp[i, j], (i, j)) for i in 1:N, j in 1:N], N*N)
     positive = filter(x -> x[1] > 0, indexed)
     possible = filter(x -> valid(h, t, x[2]...), positive)
-    map(x -> x[2], sort(shuffle(rng, possible), by=x -> x[1]))
+#    map(x -> x[2], sort(shuffle(rng, possible), by=x -> x[1]))
+    map(x -> x[2], sort(possible, by=x -> x[1]))
 end
 
 

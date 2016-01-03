@@ -10,7 +10,7 @@ const p_challenge = r"^\s*(?P<i>\d+)/(?P<n>\d+)\s+(?P<j>\d+)/(?P<m>\d+) (?P<surp
 
 # 34 random bytes d1862e709058196a => fddd8634d3f25690
 # 30 random bits 755e948bc02367be => d68ad2353d0c378a
-const p_random = r"^\s*\d+ random (?:bits|bytes) (?P<a>[a-f0-9]+) => (?P<c>[a-f0-9]+)\s*$"
+const p_random = r"^\s*\d+ random (?:bits|bytes|deltas) (?P<a>[a-f0-9]+) => (?P<c>[a-f0-9]+)\s*$"
 
 # rotate 262 cb03e03f73d749c2 => 326e568542888c67 + merge 123 326e568542888c67, fddd8634d3f25690 => f2b69ec0fe5c1fd7
 # rotate chunk 7 0043f8c791de1a53 => 0bf67111a514bd9d + merge 97 f7e67544a9a5ef3c, 0bf67111a514bd9d => da7fc58918b190c0
@@ -154,8 +154,6 @@ end
 parent(population, tag) = population[findfirst(id -> id.tag == tag, population)]
 
 function parse_line(events, population, line, n, fraction)
-
-    println(line)
 
     if (m = match(p_challenge, line)) != nothing
         x, y = parse(Int, m[:x]), parse(Int, m[:y])
