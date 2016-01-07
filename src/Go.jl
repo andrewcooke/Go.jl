@@ -5,7 +5,8 @@ export fix, exists,
        black, empty, white, other, point, Position, IllegalMove, move!,
        evaluate, random_expression, moves,
        evolve, Direct, undump, replay_direct, dump_expression,
-       parse_log, plot_tramlines, highlight, longest_lived
+       longest_lived, final_gen,
+       parse_log, plot_tramlines, ancestors, multi, multig, children
 
 using AutoHashEquals
 using StatefulIterators
@@ -13,7 +14,7 @@ using SHA
 import Drawing; D = Drawing
 import ColorTypes; C = ColorTypes
 using ColorVectorSpace
-import Base.show, Base.delete!
+import Base.show, Base.delete!, Base.isless
 import FixedPointNumbers; N = FixedPointNumbers
 
 

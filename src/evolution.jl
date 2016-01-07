@@ -10,10 +10,10 @@ function evolve(population, board_size, max_moves, nplays, nrounds, path)
         stats = reset_stats()
         for j in 1:nplays
             a, b = pick_competitors(length(population))
+            black, white  = players(a, b, population)
             # seed below counts from 1 and can be reproduced from the log
-            result = play(population[a], population[b], board_size, max_moves,
-                          j+(i-1)*nplays, null_display)
-#            result = play(population[a], population[b], algorithm, board_display)
+            result = play(population[black], population[white], 
+                          board_size, max_moves, j+(i-1)*nplays, null_display)
             display_result(i, nrounds, j, nplays, population, a, b, result)
             apply_result!(population, a, b, result)
             stats = update_stats(stats, result)
@@ -43,25 +43,51 @@ const name_length = 16
 name(data) = sha1(data)[1:name_length]
 name(data, rank) = "$(name(data)):$(rank)"
 
-function surprise(a, b, result)
-    # best at start (low numbers); score positive if a won.
-    # so if a-b is negative then a was ranked better.
-    # and if score is positive then that was confirmed.
-    # so a shock result is when product is positive
-    result.score.total * (a-b) > 0
+function isless(a::Vector{UInt8}, b::Vector{UInt8})
+    for (aa, bb) in zip(a, b)
+        if aa < bb
+            return true
+        elseif aa > bb
+            return false
+        end
+    end
+    return false
+end
+
+# returns black, white
+players(a, b, popn) = popn[a] < popn[b] ? (a, b) : (b, a)
+
+function surprise(a, b, population, result)
+    black, white = players(a, b, population)
+    if result.score.total == 0
+        return false
+    else
+        return (black < white) != (result.score.total > 0)
+    end
 end
 
 function display_result(i, n, j, m, population, a, b, result)
-    @printf("%3d/%d %3d/%d %s", i, n, j, m, surprise(a, b, result) ? "!" : " ")
-    a, b = result.score.total < 0 ? (b, a) : (a, b)
-    @printf(" %s:%-3d ", name(population[a]), a)
-    print(result.score.total == 0 ? "dr" : "bt")
-    @printf(" %s:%-3d ", name(population[b]), b)
-    @printf("%2d sc  %3d mv  %2d sp  %2d st\n", abs(result.score.total), result.score.moves, result.score.owned, result.score.stones)
+    # a, b are indices, where a < b
+    # a lost to b if surprise(a, b, population, result)
+    # we display black on the left, white on the right
+    # we indicate the winner with <, > or = which is preceded by !
+    # if the results is a surprise
+    black, white = players(a, b, population)
+    @printf("%3d/%d %3d/%d %s", i, n, j, m, surprise(a, b, population, result) ? "!" : " ")
+    @printf(" %s:%-3d ", name(population[black]), black)
+    if result.score.total > 0
+        print(">")
+    elseif result.score.total == 0
+        print("=")
+    else
+        print("<")
+    end
+    @printf(" %s:%-3d ", name(population[white]), white)
+    @printf("%4d sc  %3d mv  %2d sp  %2d st\n", result.score.total, result.score.moves, result.score.owned, result.score.stones)
 end
 
 function apply_result!(population, a, b, result)
-    if surprise(a, b, result)
+    if surprise(a, b, population, result)
         # this loses good individuals too quickly
 #        population[a], population[b] = population[b], population[a]
         a, b = sort([a, b])
@@ -209,13 +235,13 @@ end
 
 function build_ops(length, temp)
     ops = Tuple{Number, Function}[
-              (10, x -> random_bits(temp/10)(random_single(x))),
-              (10, x -> random_deltas(temp/10)(random_single(x))),
+              (10, x -> random_bits(temp/100)(random_single(x))),
+              (10, x -> random_deltas(temp/100)(random_single(x))),
               (10, x -> merge(biased_pair(x)...)),
               (1, x -> merge_with_rotate_chunks(biased_pair(x)...)),
-              (1, x -> random_bytes(temp/10)(random_single(x)))]
+              (1, x -> random_bytes(temp/100)(random_single(x)))]
     if temp > 0.25
-        push!(ops, (10, x -> random_bytes(temp/10)(random_single(x))))
+        push!(ops, (10, x -> random_bytes(temp/100)(random_single(x))))
     end
     if temp > 0.5
         push!(ops, (10, x -> merge_with_rotate(biased_pair(x)...)))

@@ -6,7 +6,7 @@
 # where the quoted string is cut+paste from the log
 
 
-
+# here, a plays first (black)
 function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, seed, display)
     passed, t, h = 0, black, [Position{board_size}()]
     rng = MersenneTwister(seed)
@@ -62,13 +62,10 @@ end
 function replay_direct(d::Dict{AbstractString, Vector{UInt8}}, line::AbstractString; board_size=19, max_moves=1000)
 # 50/10000  10/25 ! 8414ac2df622accd:38  bt c340be963d5fc19f:5   14 sc  100 mv   5 sp  67 st
 # 50/10000  11/25   c340be963d5fc19f:6   bt 6b34dd72635a19e6:19   2 sc   45 mv   6 sp  45 st   
-    p = r"^\s*(?P<i>\d+)/(?P<n>\d+)\s+(?P<j>\d+)/(?P<m>\d+) (?P<surprise>(?:!| )) (?P<a>[a-f0-9]+):\d+\s+(?:bt|dr)\s+(?P<b>[a-f0-9]+):\d+.*$"
+    p = r"^\s*(?P<i>\d+)/(?P<n>\d+)\s+(?P<j>\d+)/(?P<m>\d+) (?P<surprise>(?:!| )) (?P<a>[a-f0-9]+):\d+\s+(?:>|=|<)\s+(?P<b>[a-f0-9]+):\d+.*$"
     m = match(p, line)
     println(m.captures)
     i, n, j, m, surprise, a, b = m.captures
-    if surprise == "!"
-        a, b = b, a
-    end
     seed = (parse(Int, i)-1) * parse(Int, m) + parse(Int, j)
     println("$a v $b (seed $(seed))")
     replay_direct(d[a], d[b], board_size, max_moves, seed)

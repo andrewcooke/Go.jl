@@ -1,12 +1,12 @@
 
 # this file used something like:
 
-# julia-0.4 -e 'using Go; e = parse_log("evol-1.log", "evol-1.dump", 50, 0.5; limit=-1); plot_tramlines(e, "go.png"; min_axis=1900, tint=highlight("05f051414412588b"))'
+# julia-0.4 -e 'using Go; e = parse_log("evol-1.log", "evol-1.dump", 50, 0.5; limit=-1); plot_tramlines(e, "go.png"; min_axis=1900, tint=ancestors("05f051414412588b"))'
 
-# where the highlight tag is typically a recent, high scoring individual
+# where the ancestors tag is typically a recent, high scoring individual
 
 
-const p_challenge = r"^\s*(?P<i>\d+)/(?P<n>\d+)\s+(?P<j>\d+)/(?P<m>\d+) (?P<surprise>(?:!| )) (?P<a>[a-f0-9]+):(?P<x>\d+)\s+(?:bt|dr)\s+(?P<b>[a-f0-9]+):(?P<y>\d+).*$"
+const p_challenge = r"^\s*(?P<i>\d+)/(?P<n>\d+)\s+(?P<j>\d+)/(?P<m>\d+) (?P<surprise>(?:!| )) (?P<a>[a-f0-9]+):(?P<x>\d+)\s+(?:>|=|<)\s+(?P<b>[a-f0-9]+):(?P<y>\d+).*$"
 
 # 34 random bytes d1862e709058196a => fddd8634d3f25690
 # 30 random bits 755e948bc02367be => d68ad2353d0c378a
@@ -155,15 +155,22 @@ parent(population, tag) = population[findfirst(id -> id.tag == tag, population)]
 
 function parse_line(events, population, line, n, fraction)
 
+#    println("$(length(population)) $(line)")
+
     if (m = match(p_challenge, line)) != nothing
         x, y = parse(Int, m[:x]), parse(Int, m[:y])
         a, b = population[x], population[y]
         @assert a.tag == m[:a]
         @assert b.tag == m[:b]
+        # order so x/a is the higher rated
+        if y < x
+            x, y = y, x
+            a, b = b, a
+        end
         if m[:surprise] == "!"
-            push!(events,  SuccessfulChallenge(a, b))
-            population[y+1:x] = population[y:x-1]
-            population[y] = a
+            push!(events,  SuccessfulChallenge(b, a))
+            population[x+1:y] = population[x:y-1]
+            population[x] = b
         else
             push!(events, FailedChallenge(a, b))
         end
@@ -220,6 +227,10 @@ function parse_log(log_path, dump_path, n, fraction; limit=-1)
         for line in eachline(io)
 
             try
+                if ! started
+                    # discard any junk breeding
+                    population = population[1:n]
+                end
                 k = parse_line(events, population, line[1:end-1], n, fraction)
                 started = started || isa(events[end], Challenge)
                 if started 
@@ -329,7 +340,6 @@ function getc(s, id, k)
 end
 
 function grey!(s, popn, events)
-    n = length(popn)
     s.colour_table[0] = INK
     for p in popn
         for id in p
@@ -340,29 +350,55 @@ function grey!(s, popn, events)
     end
 end
 
-function highlight(tag...)
-
-    function find(tag, popn)
-        for k in length(popn):-1:1
-            for id in popn[k]
-                if id.tag == tag
-                    return id
-                end
+function multi(s, popn, events)
+    for p in popn
+        for id in p
+            if ! haskey(s.colour_index, id)
+                n = length(s.colour_table) + 1
+                s.colour_table[n] = convert(C.RGB{N.UFixed8}, C.HSV(360 * rand(), 0.5 + 0.5 * rand(), 0.2 + 0.8 * rand()))
+                s.colour_index[id] = (n, 0, n)
             end
         end
-        error("$(tag) does not exist")
     end
+end
+
+function multig(s, popn, events)
+    for p in popn
+        for id in p
+            if ! haskey(s.colour_index, id)
+                n = length(s.colour_table) + 1
+                s.colour_table[n] = convert(C.RGB{N.UFixed8}, C.HSV(0, 0, 0.8 * rand()))
+                s.colour_index[id] = (n, 0, n)
+            end
+        end
+    end
+end
+
+function find(tag, popn)
+    for k in length(popn):-1:1
+        for id in popn[k]
+            if id.tag == tag
+                return id
+            end
+        end
+    end
+    error("$(tag) does not exist")
+end
+
+function ancestors(tag...)
 
     function tint!(s, popn, events)
 
-        births = Dict{Individual, Tuple{Int, Vector{Individual}}}()
+        parents = Dict{Individual, Tuple{Int, Vector{Individual}}}()
         for (k, e) in enumerate(events)
             if isa(e, Birth)
-                births[e.id] = (k, e.parents)
+                parents[e.id] = (k, e.parents)
             end
         end
 
-        grey!(s, popn, events)
+#        grey!(s, popn, events)
+        multig(s, popn, events)
+        zero = length(s.colour_table)
 
         for (h, t) in enumerate(tag)
             println("$h $t")
@@ -372,22 +408,71 @@ function highlight(tag...)
             queue = Tuple{Int, Int, Individual}[(1, length(events), id)]
             while length(queue) > 0
                 (depth, k, id) = splice!(queue, 1:1)[1]
-                index = h * 1000 + depth
+                index = h * 1000 + depth + zero
                 if ! haskey(s.colour_table, index)
                     z = 0.95^(depth-1)
                     s.colour_table[index] = convert(C.RGB{N.UFixed8}, C.HSV((h-1) * 60.0, z, 0.2+0.8*z))
                     print(" $depth,")
                 end
                 c = s.colour_table[index]
-                if s.colour_index[id] == (0, 0, 0)
-                    s.colour_index[id] = (index, k, 0)
+                if s.colour_index[id][2] == 0
+                    s.colour_index[id] = (index, k, s.colour_index[id][3])
                     pcount += 1
                 end
-                (k, parents) = get(births, id, (0, []))
-                for p in parents
+                (k, ps) = get(parents, id, (0, []))
+                for p in ps
                     # tweak for efficiency - queue was huge
-                    if s.colour_index[p] == (0, 0, 0)
+                    if s.colour_index[p][2] == 0
                         push!(queue, (depth+1, k, p))
+                        qcount += 1
+                    end
+                end
+            end
+            println(" done")
+            println("$(qcount) queued; $(pcount) altered")
+        end
+    end
+end
+
+function children(tag...)
+
+    function tint!(s, popn, events)
+
+        children = Dict{Individual, Vector{Individual}}()
+        for (k, e) in enumerate(events)
+            if isa(e, Birth)
+                for p in e.parents
+                    children[p] = push!(get(children, p, Individual[]), e.id)
+                end
+            end
+        end
+
+        multig(s, popn, events)
+        zero = length(s.colour_table)
+
+        for (h, t) in enumerate(tag)
+            println("$h $t")
+            print("tinting...")
+            qcount, pcount = 0, 0
+            id = find(t, popn)
+            queue = Tuple{Int, Individual}[(1, id)]
+            while length(queue) > 0
+                (depth, id) = splice!(queue, 1:1)[1]
+                index = h * 1000 + depth + zero
+                if ! haskey(s.colour_table, index)
+                    z = 0.95^(depth-1)
+                    s.colour_table[index] = convert(C.RGB{N.UFixed8}, C.HSV((h-1) * 60.0, z, 0.2+0.8*z))
+                    print(" $depth,")
+                end
+                c = s.colour_table[index]
+                if s.colour_index[id][2] == 0
+                    s.colour_index[id] = (index, 1, index)
+                    pcount += 1
+                end
+                for c in get(children, id, [])
+                    # tweak for efficiency - queue was huge
+                    if s.colour_index[c][2] == 0
+                        push!(queue, (depth+1, c))
                         qcount += 1
                     end
                 end
@@ -451,7 +536,7 @@ function plot_step(x, yb, ya)
 end
 
 function plot_steps(s, b, a, k)
-    for id in a
+    for id in reverse(a)
         c, i, j = getc(s, id, k), findfirst(b, id), findfirst(a, id)
         if i > 0 && j > 0
             x = s.col
@@ -485,6 +570,8 @@ function plot(s, b, e::VirginBirths, a, k)
     s.col = 1
 end
 
+# d = longest_lived("evol-1.log", "evol-1.dump", 50, 0.5; n2=100)
+# evolve(d, 19, 1000, 25, 10000, "evol-2.dump")
 
 function longest_lived(log_path, dump_path, n1, fraction; limit=-1, n2=-1)
 
@@ -519,4 +606,40 @@ function longest_lived(log_path, dump_path, n1, fraction; limit=-1, n2=-1)
     end
     
     return expressions
+end
+
+# d = final_gen("evol-2.log", "evol-2.dump", 100, 0.9)
+# evolve(d, 19, 1000, 25, 10000, "evol-3.dump")
+
+function final_gen(log_path, dump_path, n, fraction; limit=-1)
+
+
+    events = parse_log(log_path, dump_path, n, fraction; limit=limit)
+    popn = Vector{Vector{Individual}}()
+    for e in events
+        expand!(popn, e)
+    end
+    
+    ids = Individual[]
+    for id in popn[end]
+        if !(id in ids)
+            push!(ids, id)
+        end
+    end
+
+    named = undump(dump_path)[1]
+    expressions = [named[id.tag] for id in ids]
+
+    temp = 1.0
+    ops = build_ops(n, temp)
+    while length(expressions) < n
+        push!(expressions, weighted_rand(ops)(expressions))
+    end
+
+    for (i, expression) in enumerate(expressions)
+        println("$(name(expression)):$i")
+        dump_expression(expression)
+    end
+
+    return expressions    
 end
