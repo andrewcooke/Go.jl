@@ -296,3 +296,67 @@ function undump(path)
     end
     (named, ordered)
 end
+
+
+function evolve2(population, board_size, max_moves, nplays, nrounds, path)
+    known = Set{UInt64}()
+    exists(path) && rm(path)
+    dump(known, path, population)
+    for i in 1:nrounds
+        stats = reset_stats()
+        for j in 1:nplays
+            a, b = pick_competitors(length(population))
+            black, white  = players(a, b, population)
+            # seed below counts from 1 and can be reproduced from the log
+            result = play(population[black], population[white], 
+                          board_size, max_moves, j+(i-1)*nplays, null_display)
+            display_result(i, nrounds, j, nplays, population, a, b, result)
+            apply_result!(population, a, b, result)
+            stats = update_stats(stats, result)
+        end
+        for j in 1:min(3, length(population))
+            println("$(name(population[j], j))")
+            dump_expression(population[j])
+        end
+        println("")
+        if i != nrounds
+            population = update_population2(known, i, max_moves, nplays, 
+                                            nrounds, path,
+                                            population, stats, board_size)
+        end
+        println("")
+    end
+    population
+end
+
+function update_population2(known, i, max_moves, nplays, nrounds, path,
+                            prev_pop, stats, board_size)
+    t, sum = stats
+    # temperature varies roughly from 1 (hottest) to 0 (coldest)
+    temp = t == 0 ? 1 : max(0, min(1, 1 - (2 * sum / t) / board_size^2))
+    @printf("temp %4.3f\n", temp)
+    ops = build_ops(length(prev_pop[1]), temp)
+    n = length(prev_pop)
+    m = Int(survival * n)
+    next_pop = Vector{UInt8}[]
+    while length(next_pop) < m && length(prev_pop) > 1
+        push!(next_pop, prev_pop[1])
+        prev_pop = prev_pop[2:end]
+    end
+    m, j = length(next_pop), nplays
+    while m < n
+        push!(next_pop, weighted_rand(ops)(next_pop))
+        a, b, j = length(next_pop), rand(1:m), j+1
+        black, white  = players(a, b, next_pop)
+        result = play(next_pop[black], next_pop[white], 
+                      board_size, max_moves, j+(i-1)*nplays, null_display)
+        display_result(i, nrounds, j, nplays, next_pop, a, b, result)
+        if surprise(a, b, next_pop, result)
+            apply_result!(next_pop, a, b, result)
+            m += 1
+        end
+        dump(known, path, next_pop)
+    end
+    next_pop[1:n]
+end
+

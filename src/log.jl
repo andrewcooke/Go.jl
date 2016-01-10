@@ -198,7 +198,7 @@ function parse_line(events, population, line, n, fraction)
 
     elseif match(p_temp, line) != nothing
         push!(events, Deaths(Individual[]))
-        for i in 1:(n - Int(fraction * n))
+        while length(population) > Int(fraction * n)
             id = pop!(population)
             push!(events[end].ids, id)
         end

@@ -132,7 +132,7 @@ markers(n) = Set([Integer(floor(n/4)), (n+1)/2, n+1-Integer(floor(n/4))])
 
 function fmtpoint(r::Row, y, n)
     m = markers(n)
-    fmt(x) = (y in m && x in m ? "O+X" : "O.X")[2+Int(point(r, x))]
+    fmt(x) = (y in m && x in m ? "O.X" : "O X")[2+Int(point(r, x))]
     # extra space aligns with other components that use 2 characters
     # per point
     string(" ", join(map(fmt, 1:n), " "))
