@@ -23,7 +23,7 @@ const p_merge = r"^\s*merge \d+ (?P<a>[a-f0-9]+), (?P<b>[a-f0-9]+) => (?P<c>[a-f
 const p_temp = r"\s*temp \d+\.\d+\s*$"
 
 const INK = C.RGB(0.2, 0.2, 0.2)
-const PEN = 0.4
+const PEN = 0.45
 
 # this is not hashed - each instance is unique, and we can have
 # multiple, distinct instances with the same tag.
@@ -491,11 +491,22 @@ function rshift(popn)
 end
 
 function plot_tramlines(events, path; 
-                        ratio=1.4, min_scale=2, min_axis=1000, tint=grey!)
+                        ratio=1.4, min_scale=2, min_axis=1000, tint=grey!,
+                        lo=1, hi=-1)
 
     popn = Vector{Vector{Individual}}()
     for e in events
         expand!(popn, e)
+    end
+
+    if lo > 1
+        popn = popn[lo:end]
+        events = events[lo+1:end]
+        splice!(events, 1:0, [VirginBirths(popn[1])])
+    end
+    if hi != -1
+        popn = popn[1:hi-lo+1]
+        events = events[1:hi-lo+1]
     end
     max_pop = maximum(map(length, popn)) 
 
@@ -504,7 +515,9 @@ function plot_tramlines(events, path;
 
     dk = ceil(Int, length(events) / 10)
     tint(s, popn, events)
-    D.with(D.PNG(path, ceil(Int, nx), ceil(Int, ny)),
+    D.with(
+           D.PNG(path, ceil(Int, nx), ceil(Int, ny)),
+#           D.PDF(path; size="letter"),
            D.Axes(scale=(s.cols, s.rows*s.max_pop)),
            D.Pen(PEN; cap="round", join="round")) do
         print("plotting $(length(events))...")
@@ -634,6 +647,9 @@ function final_gen(log_path, dump_path, n, fraction; limit=-1)
     ops = build_ops(n, temp)
     while length(expressions) < n
         push!(expressions, weighted_rand(ops)(expressions))
+    end
+    while length(expressions) > n
+        pop!(expressions)
     end
 
     for (i, expression) in enumerate(expressions)
