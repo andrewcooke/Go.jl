@@ -160,7 +160,7 @@ function parse_line(events, population, line, n, fraction)
     if (m = match(p_challenge, line)) != nothing
         x, y = parse(Int, m[:x]), parse(Int, m[:y])
         a, b = population[x], population[y]
-        @assert a.tag == m[:a]
+         @assert a.tag == m[:a]
         @assert b.tag == m[:b]
         # order so x/a is the higher rated
         if y < x
@@ -633,23 +633,28 @@ function final_gen(log_path, dump_path, n, fraction; limit=-1)
         expand!(popn, e)
     end
     
-    ids = Individual[]
+    tags = AbstractString[]
     for id in popn[end]
-        if !(id in ids)
-            push!(ids, id)
+        if !(id.tag in tags)
+            push!(tags, id.tag)
         end
     end
 
     named = undump(dump_path)[1]
-    expressions = [named[id.tag] for id in ids]
+    expressions = [named[tag] for tag in tags]
 
     temp = 1.0
     ops = build_ops(n, temp)
     while length(expressions) < n
-        push!(expressions, weighted_rand(ops)(expressions))
+        expression = weighted_rand(ops)(expressions)
+        if !(expression in expressions)
+            println("adding $(name(expression))")
+            push!(expressions, expression)
+        end
     end
     while length(expressions) > n
-        pop!(expressions)
+        expression = pop!(expressions)
+        println("dropping $(name(expression))")
     end
 
     for (i, expression) in enumerate(expressions)
