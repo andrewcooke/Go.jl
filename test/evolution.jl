@@ -7,7 +7,7 @@ for i in 1:10
 end
 
 d = random_population(Go.lheader+Go.chunk*50, 100)
-evolve(d, 19, 1000, 50, 10000, "../evol-a.dump")
+evolve2(d, 19, 1000, 50, 10000, "../evol-a.dump")
 
 #d = longest_lived("../evol-1.log", "../evol-1.dump", 50, 0.5; n2=100)
 #evolve(d, 19, 1000, 25, 10000, "../evol-2.dump")
