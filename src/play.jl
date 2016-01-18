@@ -7,12 +7,11 @@
 
 
 # here, a plays first (black)
-function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, seed, display)
+function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, display)
     passed, t, h = 0, black, [Position{board_size}()]
-    rng = MersenneTwister(seed)
     while passed < 2 && h[end].score.moves < max_moves
         played = false
-        for m in moves(a, h, t, rng)
+        for m in moves(a, h, t)
             p = Position(h[end])
             move!(p, t, m...)
             if length(filter(x -> x.board == p.board, h)) > 0
@@ -52,8 +51,8 @@ end
 # note that the higher ranked net plays first (as black), so if the result is a surprise
 # (with a !) then the order of the nets must be reversed from the log.
 
-function replay_direct(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, seed)
-    p = play(a, b, board_size, max_moves, seed, board_display)
+function replay_direct(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves)
+    p = play(a, b, board_size, max_moves, board_display)
     println("\n\nfinal position:")
     println(p)
     p
@@ -68,5 +67,5 @@ function replay_direct(d::Dict{AbstractString, Vector{UInt8}}, line::AbstractStr
     i, n, j, m, surprise, a, b = m.captures
     seed = (parse(Int, i)-1) * parse(Int, m) + parse(Int, j)
     println("$a v $b (seed $(seed))")
-    replay_direct(d[a], d[b], board_size, max_moves, seed)
+    replay_direct(d[a], d[b], board_size, max_moves)
 end

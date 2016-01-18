@@ -111,7 +111,7 @@ function chunkend(s)
     end
 end
 
-const given_atom = 10
+const given_atom = 13
 const given_kern = 3
 const header = map(UInt8, collect("goxp"))
 const lheader = 7   # 4 chars, 1 version, 2 length
@@ -406,6 +406,17 @@ function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t
             else
                 edge
             end
+        elseif input == 11
+            m = (N+1) / 2
+            dx = abs(m - x)
+            dy = abs(m - y)
+            (dx + dy) / N
+        elseif input == 12
+            dx = min(x, N+1-x)
+            dy = min(y, N+1-y)
+            2 * (min(dx, dy) - 1) / N
+        elseif input == 13
+            2 * min(abs(x-y), abs(N+1-x-y)) / N
         else
             i = input-given_atom
             e[i] || evaluate(f, length(f)-i+1, p, t, e, d, index)
@@ -505,14 +516,25 @@ end
 # by the largest numbers.  so instead, we just pick off the largest
 # scoring locations (and then exclude invalid moves etc).
 
-function moves{N}(e::Array{UInt8, 1}, h::Vector{Position{N}}, t::Point, rng)
+function moves{N}(e::Array{UInt8, 1}, h::Vector{Position{N}}, t::Point)
     p = h[end]
     logp = evaluate(e, p, t)
     indexed = reshape([(logp[i, j], (i, j)) for i in 1:N, j in 1:N], N*N)
     positive = filter(x -> x[1] > 0, indexed)
     possible = filter(x -> valid(h, t, x[2]...), positive)
-#    map(x -> x[2], sort(shuffle(rng, possible), by=x -> x[1]))
-    map(x -> x[2], sort(possible, by=x -> x[1]))
+    m = map(x -> x[2], sort(possible; by=x -> x[1], rev=true))
+    if p.score.moves == 0
+        r = hex2bytes(name(e))[1]
+        t = transforms[1 + (r % length(transforms))]
+        o = [Int((N+1) / 2) Int((N+1) / 2)]
+        function transform(xy)
+            xy2 = hcat(xy...)
+            xy3 = o + ((xy2 - o) * t)
+            tuple(xy3...)
+        end
+        m = map(transform, m)
+    end
+    m
 end
 
 
@@ -527,7 +549,10 @@ const lookup_dict = Dict{Int,ASCIIString}(4 => "zero",
                                           2 => "flood",
                                           3 => "owner",
                                           9 => "size",
-                                          10 => "lives")
+                                          10 => "lives",
+                                          11 => "centre",
+                                          12 => "edge",
+                                          13 => "diag")
 
 function lookup_name(input, n, given)
     if input > given

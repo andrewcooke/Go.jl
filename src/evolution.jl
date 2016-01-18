@@ -13,7 +13,7 @@ function evolve(population, board_size, max_moves, nplays, nrounds, path)
             black, white  = players(a, b, population)
             # seed below counts from 1 and can be reproduced from the log
             result = play(population[black], population[white], 
-                          board_size, max_moves, j+(i-1)*nplays, null_display)
+                          board_size, max_moves, null_display)
             display_result(i, nrounds, j, nplays, population, a, b, result)
             apply_result!(population, a, b, result)
             stats = update_stats(stats, result)
