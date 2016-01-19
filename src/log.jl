@@ -493,7 +493,7 @@ end
 function squish!(events, popn)
     e, p = Integer[], Integer[]
     for i in 2:(length(events)-1)
-        if isa(events[i], Birth)
+        if isa(events[i], Birth) && isa(events[i+1], SuccessfulChallenge) && events[i].id == events[i+1].won
             push!(e, i+1)
             push!(p, i)
         end

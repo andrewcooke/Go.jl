@@ -14,7 +14,7 @@ using SHA
 import Drawing; D = Drawing
 import ColorTypes; C = ColorTypes
 using ColorVectorSpace
-import Base.show, Base.delete!, Base.isless
+import Base.show, Base.delete!, Base.isless, Base.hash, Base.==
 import FixedPointNumbers; N = FixedPointNumbers
 
 

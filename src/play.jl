@@ -9,7 +9,7 @@
 # here, a plays first (black)
 function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, display)
     passed, t, h = 0, black, [Position{board_size}()]
-    while passed < 2 && h[end].score.moves < max_moves
+    while passed < 2 && h[end].stats.moves < max_moves
         played = false
         for m in moves(a, h, t)
             p = Position(h[end])
@@ -27,6 +27,7 @@ function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, display
             passed = 0
         else
             passed += 1
+            push!(h, pass!(Position(h[end])))
         end
         a, b, t = b, a, other(t)
     end
@@ -37,7 +38,7 @@ null_display(p, x, y) = nothing
 
 function board_display(p, x, y)
     t = point(p, x, y)
-    @printf("\n\n%d (%d): %s at (%d,%d)\n", p.score.moves, p.score.total, t == black ? "black" : "white", x, y)
+    @printf("\n\n%d (%d): %s at (%d,%d)\n", p.stats.moves, p.stats.score, t == black ? "black" : "white", x, y)
     println(join(fmtpoint(p.board), "\n"))
 end
 

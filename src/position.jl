@@ -85,30 +85,36 @@ Space{N}(g::Space{N}) = Space{N}(g)
     Details(d::Details) = new(d.spaces, d.prisoners)
 end
 
-@auto_hash_equals type Score
-    total::Int
+@auto_hash_equals type Stats
+    prev::Nullable{Tuple{Int,Int}}
+    score::Int
     moves::Int
     owned::Int
     stones::Float32
     colour::Dict{Point, Details}
-    Score() = new(0, 0, 0, 0, Dict{Point, Details}(black=>Details(), white=>Details()))
-    Score(s::Score) = new(s.total, s.moves, s.owned, s.stones, Dict([x=>Details(s.colour[x]) for x in (black, white)]))
+    Stats() = new(Nullable{Tuple{Int,Int}}(), 0, 0, 0, 0, Dict{Point, Details}(black=>Details(), white=>Details()))
+    Stats(s::Stats) = new(s.prev, s.score, s.moves, s.owned, s.stones, Dict([x=>Details(s.colour[x]) for x in (black, white)]))
 end
 
 """a single position (implicitly, in a search tree).  combines Board,
-Groups, Flood and Space."""
-@auto_hash_equals immutable Position{N}
+Groups, Flood, Space and Stats."""
+immutable Position{N}
     board::Board{N}
     groups::Groups{N}
     flood::Flood{N}
     space::Space{N}
-    score::Score
-    Position() = new(Board{N}(), Groups{N}(), Flood{N}(), Space{N}(), Score())
+    stats::Stats
+    Position() = new(Board{N}(), Groups{N}(), Flood{N}(), Space{N}(), Stats())
     Position(p::Position) =
-        new(Board(p.board), Groups(p.groups), Flood(p.flood), Space(p.space), Score(p.score))
+        new(Board(p.board), Groups(p.groups), Flood(p.flood), Space(p.space), Stats(p.stats))
 end
 Position{N}(g::Position{N}) = Position{N}(g)
 Position() = Position{19}()
+
+# equality and hash exclude previous position because we are using
+# "global repeat"
+hash(p::Position) = hash(p.board, hash(p.groups, hash(p.flood, hash(p.space, hash(:Position)))))
+=={N}(a::Position{N}, b::Position{N}) = isequal(a.board, b.board) && isequal(a.groups, b.groups) && isequal(a.flood, b.flood) && isequal(a.space, b.space)
 
 
 # --- points
@@ -203,9 +209,9 @@ function Base.print(io::IO, s::Space)
     print(io, join(fmtindex(s), "\n"))
 end
 
-Base.print(io::IO, s::Score) = 
+Base.print(io::IO, s::Stats) = 
 @printf(io, " %2d  [black  pr=%-2d sp=%-3d] [white  pr=%-2d sp=%-3d]", 
-        s.total, 
+        s.score, 
         s.colour[black].prisoners, s.colour[black].spaces,
         s.colour[white].prisoners, s.colour[white].spaces)
 
@@ -225,7 +231,7 @@ function Base.print(io::IO, p::Position)
                    zip(fmtborder(p.space), 
                        fmtindex(p.space))), "\n"))
     print(io, "\n\n")
-    print(io, p.score)
+    print(io, p.stats)
 end
 
 
@@ -271,7 +277,7 @@ zero (these are later replaced in flood_dead_group!) and Space.index
 to the next available value (patched up in fix_space!)."""
 function delete_group!{N}(p::Position{N}, t, g)
     space = k_lowest_unused(1, p.space.index, N)[1]
-    p.score.colour[t].prisoners = p.score.colour[t].prisoners + p.groups.size[g]
+    p.stats.colour[t].prisoners = p.stats.colour[t].prisoners + p.groups.size[g]
     p.groups.size[g] = 0
     @forall i j N begin
         if p.groups.index[i, j] == g
@@ -459,23 +465,24 @@ function index_new_space!{N}(s::Space{N}, b::Board{N}, x, y)
     end
 end
 
-function score!{N}(x::Score, s::Space{N}, g::Groups{N})
-    function f(x, b)
+function stats!{N}(z::Stats, s::Space{N}, g::Groups{N}, x, y)
+    function f(z, b)
         if b == 1
-            x.colour[black].spaces = x.colour[black].spaces + 1
+            z.colour[black].spaces = z.colour[black].spaces + 1
         elseif b == 2
-            x.colour[white].spaces = x.colour[white].spaces + 1
+            z.colour[white].spaces = z.colour[white].spaces + 1
         end
-        x
+        z
     end
-    x.colour[black].spaces, x.colour[white].spaces = 0, 0
-    foldl(f, x, s.border)
-    b, w = x.colour[black], x.colour[white]
-    x.total = b.prisoners + b.spaces - (w.prisoners + w.spaces)
+    z.colour[black].spaces, z.colour[white].spaces = 0, 0
+    foldl(f, z, s.border)
+    b, w = z.colour[black], z.colour[white]
+    z.score = b.prisoners + b.spaces - (w.prisoners + w.spaces)
     # two measures of progress
-    x.stones = count(x -> x == 0, s.border)
-    x.owned = b.spaces + w.spaces
-    x.moves += 1
+    z.stones = count(x -> x == 0, s.border)
+    z.owned = b.spaces + w.spaces
+    z.moves += 1
+    z.prev = (x, y)
 end
 
 type IllegalMove <: Exception end
@@ -546,8 +553,13 @@ function move!{N}(p::Position{N}, t::Point, x, y)
     calculate_lives!(p.groups)
     fix_space!(p.space, p.board)
     assert_alive(p, x, y)
-    score!(p.score, p.space, p.groups)
+    stats!(p.stats, p.space, p.groups, x, y)
     p   # support call with new instance
+end
+
+function pass!(p::Position)
+    p.stats.prev = Nullable{Tuple{Int,Int}}()
+    p
 end
 
 
@@ -588,12 +600,12 @@ function ko{N}(h::Vector{Position{N}}, t::Point, x, y)
     # for a ko situation, the previous move must have captured a
     # single piece.
     opponent = other(t)
-    if (h[end].score.colour[opponent].prisoners - 
-        h[end-1].score.colour[opponent].prisoners) != 1
+    if (h[end].stats.colour[opponent].prisoners - 
+        h[end-1].stats.colour[opponent].prisoners) != 1
         return false
     end
-    if (h[end].score.colour[opponent].spaces - 
-        h[end-1].score.colour[opponent].spaces) != 1
+    if (h[end].stats.colour[opponent].spaces - 
+        h[end-1].stats.colour[opponent].spaces) != 1
         return false
     end
     # and there must be a possible group that we capture now, with a

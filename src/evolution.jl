@@ -58,10 +58,10 @@ players(a, b, popn) = popn[a] < popn[b] ? (a, b) : (b, a)
 
 function surprise(a, b, population, result)
     black, white = players(a, b, population)
-    if result.score.total == 0
+    if result.stats.score == 0
         return false
     else
-        return (black < white) != (result.score.total > 0)
+        return (black < white) != (result.stats.score > 0)
     end
 end
 
@@ -74,15 +74,15 @@ function display_result(i, n, j, m, population, a, b, result)
     black, white = players(a, b, population)
     @printf("%3d/%d %3d/%d %s", i, n, j, m, surprise(a, b, population, result) ? "!" : " ")
     @printf(" %s:%-3d ", name(population[black]), black)
-    if result.score.total > 0
+    if result.stats.score > 0
         print(">")
-    elseif result.score.total == 0
+    elseif result.stats.score == 0
         print("=")
     else
         print("<")
     end
     @printf(" %s:%-3d ", name(population[white]), white)
-    @printf("%4d sc  %3d mv  %2d sp  %2d st\n", result.score.total, result.score.moves, result.score.owned, result.score.stones)
+    @printf("%4d sc  %3d mv  %2d sp  %2d st\n", result.stats.score, result.stats.moves, result.stats.owned, result.stats.stones)
 end
 
 function apply_result!(population, a, b, result)
@@ -104,8 +104,8 @@ reset_stats() = 0, 0.0
 function update_stats(stats, result)
     n, sum = stats
     # ignore games with one stone since i has an artificially high owned
-    if result.score.stones > 1
-        n+1, sum+result.score.owned
+    if result.stats.stones > 1
+        n+1, sum+result.stats.owned
     else
         n, sum
     end

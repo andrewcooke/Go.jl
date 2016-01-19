@@ -112,7 +112,7 @@ function chunkend(s)
 end
 
 const given_atom = 13
-const given_kern = 3
+const given_kern = 4
 const header = map(UInt8, collect("goxp"))
 const lheader = 7   # 4 chars, 1 version, 2 length
 
@@ -365,16 +365,16 @@ end
 
 function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t::Point, index::Index)
     
-    if input == 4
+    if input == 5
         zero(Float32)
-    elseif input == 5
-        one(Float32)
     elseif input == 6
-        Float32(p.score.total * Int(t))
+        one(Float32)
     elseif input == 7
-        Float32(p.score.owned / (N*N - p.score.stones))
+        Float32(p.stats.score * Int(t))
     elseif input == 8
-        p.score.stones
+        Float32(p.stats.owned / (N*N - p.stats.stones))
+    elseif input == 9
+        p.stats.stones
     elseif 1 <= x <= N && 1 <= y <= N
         if input == 1
             # -1 for "our" colour, 0 for space, 1 for opponent's colour
@@ -392,30 +392,39 @@ function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t
             else
                 one(Float32)
             end
-        elseif input == 9
+        elseif input == 4
+            # -1 for pass, otherwise 1 where previous move was
+            if isnull(p.stats.prev)
+                -one(Float32)
+            elseif (x, y) == get(p.stats.prev)
+                one(Float32)
+            else
+                zero(Float32)
+            end
+        elseif input == 10
             i = p.groups.index[x, y]
             if i > 0
                 Float32(p.groups.size[i])
             else
                 edge
             end
-        elseif input == 10
+        elseif input == 11
             i = p.groups.index[x, y]
             if i > 0
                 Float32(p.groups.lives[i])
             else
                 edge
             end
-        elseif input == 11
+        elseif input == 12
             m = (N+1) / 2
             dx = abs(m - x)
             dy = abs(m - y)
             (dx + dy) / N
-        elseif input == 12
+        elseif input == 13
             dx = min(x, N+1-x)
             dy = min(y, N+1-y)
             2 * (min(dx, dy) - 1) / N
-        elseif input == 13
+        elseif input == 14
             2 * min(abs(x-y), abs(N+1-x-y)) / N
         else
             i = input-given_atom
@@ -523,7 +532,7 @@ function moves{N}(e::Array{UInt8, 1}, h::Vector{Position{N}}, t::Point)
     positive = filter(x -> x[1] > 0, indexed)
     possible = filter(x -> valid(h, t, x[2]...), positive)
     m = map(x -> x[2], sort(possible; by=x -> x[1], rev=true))
-    if p.score.moves == 0
+    if p.stats.moves == 0
         r = hex2bytes(name(e))[1]
         t = transforms[1 + (r % length(transforms))]
         o = [Int((N+1) / 2) Int((N+1) / 2)]
@@ -540,19 +549,20 @@ end
 
 # --- analysis
 
-const lookup_dict = Dict{Int,ASCIIString}(4 => "zero",
-                                          5 => "one",
-                                          6 => "score",
-                                          7 => "owned%",
-                                          8 => "stones%",
+const lookup_dict = Dict{Int,ASCIIString}(5 => "zero",
+                                          6 => "one",
+                                          7 => "score",
+                                          8 => "owned%",
+                                          9 => "stones%",
                                           1 => "point",
                                           2 => "flood",
                                           3 => "owner",
-                                          9 => "size",
-                                          10 => "lives",
-                                          11 => "centre",
-                                          12 => "edge",
-                                          13 => "diag")
+                                          4 => "prev",
+                                          10 => "size",
+                                          11 => "lives",
+                                          12 => "centre",
+                                          13 => "edge",
+                                          14 => "diag")
 
 function lookup_name(input, n, given)
     if input > given
