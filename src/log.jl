@@ -490,6 +490,19 @@ function rshift(popn)
     popn2
 end
 
+function squish!(events, popn)
+    e, p = Integer[], Integer[]
+    for i in 2:(length(events)-1)
+        if isa(events[i], Birth)
+            push!(e, i+1)
+            push!(p, i)
+        end
+    end
+    deleteat!(events, e)
+    deleteat!(popn, p)
+    println("squished $(length(e)) births")
+end
+
 function plot_tramlines(events, path; 
                         ratio=1.4, min_scale=2, min_axis=1000, tint=grey!,
                         lo=1, hi=-1)
@@ -498,6 +511,8 @@ function plot_tramlines(events, path;
     for e in events
         expand!(popn, e)
     end
+    
+    squish!(events, popn)  # only for evolve2
 
     if lo > 1
         popn = popn[lo:end]
