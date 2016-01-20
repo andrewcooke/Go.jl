@@ -111,8 +111,8 @@ function chunkend(s)
     end
 end
 
-const given_atom = 13
-const given_kern = 4
+const given_atom = 14
+const given_kern = 3
 const header = map(UInt8, collect("goxp"))
 const lheader = 7   # 4 chars, 1 version, 2 length
 
@@ -365,7 +365,15 @@ end
 
 function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t::Point, index::Index)
     
-    if input == 5
+    if input == 4
+        if p.stats.moves == 0
+            Float32(0.5)
+        elseif isnull(p.stats.prev)
+            zero(Float32)
+        else
+            one(Float32)
+        end
+    elseif input == 5
         zero(Float32)
     elseif input == 6
         one(Float32)
@@ -391,15 +399,6 @@ function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t
                 -one(Float32)
             else
                 one(Float32)
-            end
-        elseif input == 4
-            # -1 for pass, otherwise 1 where previous move was
-            if isnull(p.stats.prev)
-                -one(Float32)
-            elseif (x, y) == get(p.stats.prev)
-                one(Float32)
-            else
-                zero(Float32)
             end
         elseif input == 10
             i = p.groups.index[x, y]

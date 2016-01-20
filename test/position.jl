@@ -32,6 +32,23 @@ compare("position/print-position.txt", p)
 @test p.groups.size[2] == 3
 @test p.groups.size[3] == 1
 @test p.groups.size[4] == 1
+@test get(p.stats.prev) == (4,5)
+p2 = Position(p)
+@test p2 == p
+@test hash(p2.board) == hash(p.board)
+@test hash(p2.groups) == hash(p.groups)
+@test hash(p2.flood) == hash(p.flood)
+@test hash(p2.space) == hash(p.space)
+@test hash(p2) == hash(p)
+Go.pass!(p2)
+@test p2 != p
+@test hash(p2.board) == hash(p.board)
+@test hash(p2.groups) == hash(p.groups)
+@test hash(p2.flood) == hash(p.flood)
+@test hash(p2.space) == hash(p.space)
+@test hash(p2) != hash(p)
+@test !isnull(p.stats.prev)
+@test isnull(p2.stats.prev)
 
 p = Position()
 move!(p, black, 5, 5)

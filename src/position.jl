@@ -98,7 +98,7 @@ end
 
 """a single position (implicitly, in a search tree).  combines Board,
 Groups, Flood, Space and Stats."""
-immutable Position{N}
+@auto_hash_equals immutable Position{N}
     board::Board{N}
     groups::Groups{N}
     flood::Flood{N}
@@ -110,11 +110,6 @@ immutable Position{N}
 end
 Position{N}(g::Position{N}) = Position{N}(g)
 Position() = Position{19}()
-
-# equality and hash exclude previous position because we are using
-# "global repeat"
-hash(p::Position) = hash(p.board, hash(p.groups, hash(p.flood, hash(p.space, hash(:Position)))))
-=={N}(a::Position{N}, b::Position{N}) = isequal(a.board, b.board) && isequal(a.groups, b.groups) && isequal(a.flood, b.flood) && isequal(a.space, b.space)
 
 
 # --- points
