@@ -58,7 +58,7 @@ players(a, b, popn) = popn[a] < popn[b] ? (a, b) : (b, a)
 
 function surprise(a, b, population, result)
     black, white = players(a, b, population)
-    if result.stats.score == 0
+    if abs(result.stats.score) < 0.1
         return false
     else
         return (black < white) != (result.stats.score > 0)
@@ -82,7 +82,7 @@ function display_result(i, n, j, m, population, a, b, result)
         print("<")
     end
     @printf(" %s:%-3d ", name(population[white]), white)
-    @printf("%4d sc  %3d mv  %2d sp  %2d st\n", result.stats.score, result.stats.moves, result.stats.owned, result.stats.stones)
+    @printf("%6.1f sc  %3d mv  %2d sp  %2d st\n", result.stats.score, result.stats.moves, result.stats.owned, result.stats.stones)
 end
 
 function apply_result!(population, a, b, result)

@@ -382,7 +382,7 @@ function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t
     elseif input == 8
         Float32(p.stats.owned / (N*N - p.stats.stones))
     elseif input == 9
-        p.stats.stones
+        Float32(p.stats.stones)
     elseif 1 <= x <= N && 1 <= y <= N
         if input == 1
             # -1 for "our" colour, 0 for space, 1 for opponent's colour

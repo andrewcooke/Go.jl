@@ -38,7 +38,7 @@ null_display(p, x, y) = nothing
 
 function board_display(p, x, y)
     t = point(p, x, y)
-    @printf("\n\n%d (%d): %s at (%d,%d)\n", p.stats.moves, p.stats.score, t == black ? "black" : "white", x, y)
+    @printf("\n\n%d (%3.1f): %s at (%d,%d)\n", p.stats.moves, p.stats.score, t == black ? "black" : "white", x, y)
     println(join(fmtpoint(p.board), "\n"))
 end
 
@@ -68,5 +68,10 @@ function replay_direct(d::Dict{AbstractString, Vector{UInt8}}, line::AbstractStr
     i, n, j, m, surprise, a, b = m.captures
     seed = (parse(Int, i)-1) * parse(Int, m) + parse(Int, j)
     println("$a v $b (seed $(seed))")
+    replay_direct(d[a], d[b], board_size, max_moves)
+end
+
+function replay_pair(path, a, b; board_size=19, max_moves=1000)
+    d = undump(path)[1]
     replay_direct(d[a], d[b], board_size, max_moves)
 end

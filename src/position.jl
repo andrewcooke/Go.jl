@@ -10,6 +10,10 @@
 #   fill distances) is included
 
 
+# https://en.wikipedia.org/wiki/Komidashi
+komi = Float32(-6.5)
+
+
 # --- data structures
 
 
@@ -87,12 +91,12 @@ end
 
 @auto_hash_equals type Stats
     prev::Nullable{Tuple{Int,Int}}
-    score::Int
+    score::Float32
     moves::Int
     owned::Int
-    stones::Float32
+    stones::Int
     colour::Dict{Point, Details}
-    Stats() = new(Nullable{Tuple{Int,Int}}(), 0, 0, 0, 0, Dict{Point, Details}(black=>Details(), white=>Details()))
+    Stats() = new(Nullable{Tuple{Int,Int}}(), komi, 0, 0, 0, Dict{Point, Details}(black=>Details(), white=>Details()))
     Stats(s::Stats) = new(s.prev, s.score, s.moves, s.owned, s.stones, Dict([x=>Details(s.colour[x]) for x in (black, white)]))
 end
 
@@ -205,7 +209,7 @@ function Base.print(io::IO, s::Space)
 end
 
 Base.print(io::IO, s::Stats) = 
-@printf(io, " %2d  [black  pr=%-2d sp=%-3d] [white  pr=%-2d sp=%-3d]", 
+@printf(io, " %5.1f  [black  pr=%-2d sp=%-3d] [white  pr=%-2d sp=%-3d]", 
         s.score, 
         s.colour[black].prisoners, s.colour[black].spaces,
         s.colour[white].prisoners, s.colour[white].spaces)
@@ -472,7 +476,7 @@ function stats!{N}(z::Stats, s::Space{N}, g::Groups{N}, x, y)
     z.colour[black].spaces, z.colour[white].spaces = 0, 0
     foldl(f, z, s.border)
     b, w = z.colour[black], z.colour[white]
-    z.score = b.prisoners + b.spaces - (w.prisoners + w.spaces)
+    z.score = b.prisoners + b.spaces - (w.prisoners + w.spaces) + komi
     # two measures of progress
     z.stones = count(x -> x == 0, s.border)
     z.owned = b.spaces + w.spaces

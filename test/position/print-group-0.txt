@@ -58,4 +58,4 @@
  X X X X X X X X X X X X X X X X X X X  01010101010101010101010101010101010101
  X X X X X X X X X X X X X X X X X X X  01010101010101010101010101010101010101
 
- 360  [black  pr=0  sp=360] [white  pr=0  sp=0  ]
+ 353.5  [black  pr=0  sp=360] [white  pr=0  sp=0  ]
