@@ -28,5 +28,5 @@
  O O O O O O O O O  010101010101010101
  O O O O O O O O O  010101010101010101
 
- -80.5  [black  pr=0  sp=0  ] [white  pr=1  sp=73 ]
+ -81.5  [black  pr=0  sp=0  ] [white  pr=1  sp=73 ]
 [(1,1),(9,1),(1,9),(9,9)]

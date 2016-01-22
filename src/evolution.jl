@@ -12,7 +12,7 @@ function evolve(population, board_size, max_moves, nplays, nrounds, path)
             a, b = pick_competitors(length(population))
             black, white  = players(a, b, population)
             result = play(population[black], population[white], 
-                          board_size, max_moves, null_display)
+                          board_size, max_moves, null_display, null_display)
             display_result(i, nrounds, j, nplays, population, a, b, result)
             apply_result!(population, a, b, result)
             stats = update_stats(stats, result)
@@ -307,7 +307,7 @@ function evolve2(population, board_size, max_moves, nplays, nrounds, path)
             a, b = pick_competitors(length(population))
             black, white  = players(a, b, population)
             result = play(population[black], population[white], 
-                          board_size, max_moves, null_display)
+                          board_size, max_moves, null_display, null_display)
             display_result(i, nrounds, j, nplays, population, a, b, result)
             apply_result!(population, a, b, result)
             stats = update_stats(stats, result)
@@ -347,7 +347,7 @@ function update_population2(known, i, max_moves, nplays, nrounds, path,
         a, b, j = length(next_pop), rand(1:m), j+1
         black, white  = players(a, b, next_pop)
         result = play(next_pop[black], next_pop[white], 
-                      board_size, max_moves, null_display)
+                      board_size, max_moves, null_display, null_display)
         display_result(i, nrounds, j, nplays, next_pop, a, b, result)
         if surprise(a, b, next_pop, result)
             apply_result!(next_pop, a, b, result)

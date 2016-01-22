@@ -58,4 +58,4 @@
  O O O O O O O O O O O O O O O O O O O  01010101010101010101010101010101010101
  O O O O O O O O O O O O O O O O O O O  01010101010101010101010101010101010101
 
- -363.5  [black  pr=0  sp=0  ] [white  pr=1  sp=356]
+ -364.5  [black  pr=0  sp=0  ] [white  pr=1  sp=356]

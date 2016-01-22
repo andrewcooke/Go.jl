@@ -11,7 +11,7 @@
 
 
 # https://en.wikipedia.org/wiki/Komidashi
-komi = Float32(-6.5)
+komi = Float32(7.5)
 
 
 # --- data structures
@@ -96,7 +96,7 @@ end
     owned::Int
     stones::Int
     colour::Dict{Point, Details}
-    Stats() = new(Nullable{Tuple{Int,Int}}(), komi, 0, 0, 0, Dict{Point, Details}(black=>Details(), white=>Details()))
+    Stats() = new(Nullable{Tuple{Int,Int}}(), -komi, 0, 0, 0, Dict{Point, Details}(black=>Details(), white=>Details()))
     Stats(s::Stats) = new(s.prev, s.score, s.moves, s.owned, s.stones, Dict([x=>Details(s.colour[x]) for x in (black, white)]))
 end
 
@@ -464,7 +464,7 @@ function index_new_space!{N}(s::Space{N}, b::Board{N}, x, y)
     end
 end
 
-function stats!{N}(z::Stats, s::Space{N}, g::Groups{N}, x, y)
+function stats!{N}(z::Stats, s::Space{N}, x, y)
     function f(z, b)
         if b == 1
             z.colour[black].spaces = z.colour[black].spaces + 1
@@ -475,13 +475,16 @@ function stats!{N}(z::Stats, s::Space{N}, g::Groups{N}, x, y)
     end
     z.colour[black].spaces, z.colour[white].spaces = 0, 0
     foldl(f, z, s.border)
-    b, w = z.colour[black], z.colour[white]
-    z.score = b.prisoners + b.spaces - (w.prisoners + w.spaces) + komi
-    # two measures of progress
     z.stones = count(x -> x == 0, s.border)
+    z.prev = (x, y)
+    stats!(z)
+end
+
+function stats!(z::Stats)
+    b, w = z.colour[black], z.colour[white]
+    z.score = b.prisoners + b.spaces - (w.prisoners + w.spaces) - komi
     z.owned = b.spaces + w.spaces
     z.moves += 1
-    z.prev = (x, y)
 end
 
 type IllegalMove <: Exception end
@@ -552,12 +555,14 @@ function move!{N}(p::Position{N}, t::Point, x, y)
     calculate_lives!(p.groups)
     fix_space!(p.space, p.board)
     assert_alive(p, x, y)
-    stats!(p.stats, p.space, p.groups, x, y)
+    stats!(p.stats, p.space, x, y)
     p   # support call with new instance
 end
 
-function pass!(p::Position)
+function pass!(t, p::Position)
     p.stats.prev = Nullable{Tuple{Int,Int}}()
+    p.stats.colour[other(t)].prisoners += 1
+    stats!(p.stats)
     p
 end
 

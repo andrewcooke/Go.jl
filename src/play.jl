@@ -7,9 +7,10 @@
 
 
 # here, a plays first (black)
-function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, display)
+function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, display_move, display_pass)
     passed, t, h = 0, black, [Position{board_size}()]
-    while passed < 2 && h[end].stats.moves < max_moves
+    # white must pass last
+    while (passed < 2 || t == white) && h[end].stats.moves < max_moves
         played = false
         for m in moves(a, h, t)
             p = Position(h[end])
@@ -18,7 +19,7 @@ function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, display
                 println("repeated position")
             else
                 push!(h, p)
-                display(p, m...)
+                display_move(p, m...)
                 played = true
                 break
             end
@@ -27,7 +28,8 @@ function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, display
             passed = 0
         else
             passed += 1
-            push!(h, pass!(Position(h[end])))
+            push!(h, pass!(t, Position(h[end])))
+            display_pass(h[end], t)
         end
         a, b, t = b, a, other(t)
     end
@@ -35,6 +37,7 @@ function play(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves, display
 end
 
 null_display(p, x, y) = nothing
+null_display(p, t) = nothing
 
 function board_display(p, x, y)
     t = point(p, x, y)
@@ -42,6 +45,9 @@ function board_display(p, x, y)
     println(join(fmtpoint(p.board), "\n"))
 end
 
+function pass_display(p, t)
+    @printf("\n%d (%3.1f): %s pass\n", p.stats.moves, p.stats.score, t == black ? "black" : "white")
+end
 
 # for replay, pick a game from the log.  perhaps
 # 1000/1000   6/20   ceaa93b88f34d14f:1   bt fb9b4e8b26cd7702:3    9 sc   81 mv   4 sp  70 st
@@ -53,7 +59,7 @@ end
 # (with a !) then the order of the nets must be reversed from the log.
 
 function replay_direct(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves)
-    p = play(a, b, board_size, max_moves, board_display)
+    p = play(a, b, board_size, max_moves, board_display, pass_display)
     println("\n\nfinal position:")
     println(p)
     p
@@ -74,4 +80,17 @@ end
 function replay_pair(path, a, b; board_size=19, max_moves=1000)
     d = undump(path)[1]
     replay_direct(d[a], d[b], board_size, max_moves)
+end
+
+function replay_latest(; log_path="evol-c.log", dump_path="evol-c.dump", 
+                       a=1, b=2, n=100, fraction=0.9,
+                       board_size=19, max_moves=1000)
+    events = parse_log(log_path, dump_path, n, fraction)
+    popn = Vector{Vector{Individual}}()
+    for e in events
+        expand!(popn, e)
+    end
+    named = undump(dump_path)[1]
+    replay_direct(named[popn[end][a].tag], named[popn[end][b].tag], 
+                  board_size, max_moves)
 end

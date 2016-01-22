@@ -9,5 +9,5 @@ end
 #d = random_population(Go.lheader+Go.chunk*50, 100)
 #evolve2(d, 19, 1000, 50, 10000, "../evol-a.dump")
 
-d = final_gen("../evol-a.log", "../evol-a.dump", 100, 0.9)
-evolve2(d, 19, 1000, 50, 10000, "../evol-b.dump")
+d = final_gen("../evol-b.log", "../evol-b.dump", 100, 0.9)
+evolve2(d, 19, 1000, 50, 10000, "../evol-c.dump")

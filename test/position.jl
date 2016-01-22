@@ -40,7 +40,7 @@ p2 = Position(p)
 @test hash(p2.flood) == hash(p.flood)
 @test hash(p2.space) == hash(p.space)
 @test hash(p2) == hash(p)
-Go.pass!(p2)
+Go.pass!(Go.black, p2)
 @test p2 != p
 @test hash(p2.board) == hash(p.board)
 @test hash(p2.groups) == hash(p.groups)
