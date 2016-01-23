@@ -641,7 +641,6 @@ end
 
 function final_gen(log_path, dump_path, n, fraction; limit=-1)
 
-
     events = parse_log(log_path, dump_path, n, fraction; limit=limit)
     popn = Vector{Vector{Individual}}()
     for e in events

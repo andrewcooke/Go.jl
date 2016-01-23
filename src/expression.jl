@@ -112,7 +112,7 @@ function chunkend(s)
 end
 
 const given_atom = 14
-const given_kern = 3
+const given_kern = 8
 const header = map(UInt8, collect("goxp"))
 const lheader = 7   # 4 chars, 1 version, 2 length
 
@@ -365,7 +365,7 @@ end
 
 function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t::Point, index::Index)
     
-    if input == 4
+    if input == 9
         if p.stats.moves == 0
             Float32(0.5)
         elseif isnull(p.stats.prev)
@@ -373,15 +373,15 @@ function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t
         else
             one(Float32)
         end
-    elseif input == 5
+    elseif input == 10
         zero(Float32)
-    elseif input == 6
+    elseif input == 11
         one(Float32)
-    elseif input == 7
+    elseif input == 12
         Float32(p.stats.score * Int(t))
-    elseif input == 8
+    elseif input == 13
         Float32(p.stats.owned / (N*N - p.stats.stones))
-    elseif input == 9
+    elseif input == 14
         Float32(p.stats.stones)
     elseif 1 <= x <= N && 1 <= y <= N
         if input == 1
@@ -400,30 +400,30 @@ function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t
             else
                 one(Float32)
             end
-        elseif input == 10
+        elseif input == 4
             i = p.groups.index[x, y]
             if i > 0
                 Float32(p.groups.size[i])
             else
                 edge
             end
-        elseif input == 11
+        elseif input == 5
             i = p.groups.index[x, y]
             if i > 0
                 Float32(p.groups.lives[i])
             else
                 edge
             end
-        elseif input == 12
+        elseif input == 6
             m = (N+1) / 2
             dx = abs(m - x)
             dy = abs(m - y)
             (dx + dy) / N
-        elseif input == 13
+        elseif input == 7
             dx = min(x, N+1-x)
             dy = min(y, N+1-y)
             2 * (min(dx, dy) - 1) / N
-        elseif input == 14
+        elseif input == 8
             2 * min(abs(x-y), abs(N+1-x-y)) / N
         else
             i = input-given_atom
@@ -548,20 +548,20 @@ end
 
 # --- analysis
 
-const lookup_dict = Dict{Int,ASCIIString}(5 => "zero",
-                                          6 => "one",
-                                          7 => "score",
-                                          8 => "owned%",
-                                          9 => "stones%",
-                                          1 => "point",
+const lookup_dict = Dict{Int,ASCIIString}(1 => "point",
                                           2 => "flood",
                                           3 => "owner",
-                                          4 => "prev",
-                                          10 => "size",
-                                          11 => "lives",
-                                          12 => "centre",
-                                          13 => "edge",
-                                          14 => "diag")
+                                          4 => "size",
+                                          5 => "lives",
+                                          6 => "centre",
+                                          7 => "edge",
+                                          8 => "diag",
+                                          9 => "prev",
+                                          10 => "zero",
+                                          11 => "one",
+                                          12 => "score",
+                                          13 => "owned%",
+                                          14 => "stones%")
 
 function lookup_name(input, n, given)
     if input > given

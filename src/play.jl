@@ -46,7 +46,7 @@ function board_display(p, x, y)
 end
 
 function pass_display(p, t)
-    @printf("\n%d (%3.1f): %s pass\n", p.stats.moves, p.stats.score, t == black ? "black" : "white")
+    @printf("\n\n%d (%3.1f): %s pass\n", p.stats.moves, p.stats.score, t == black ? "black" : "white")
 end
 
 # for replay, pick a game from the log.  perhaps
@@ -55,8 +55,6 @@ end
 # the read in the population and replay:
 # > d = undump("evol-1.dump");
 # > replay_direct(d["ceaa93b88f34d14f"], d["fb9b4e8b26cd7702"], 9, 81, 20*999+6)
-# note that the higher ranked net plays first (as black), so if the result is a surprise
-# (with a !) then the order of the nets must be reversed from the log.
 
 function replay_direct(a::Vector{UInt8}, b::Vector{UInt8}, board_size, max_moves)
     p = play(a, b, board_size, max_moves, board_display, pass_display)
@@ -82,7 +80,7 @@ function replay_pair(path, a, b; board_size=19, max_moves=1000)
     replay_direct(d[a], d[b], board_size, max_moves)
 end
 
-function replay_latest(; log_path="evol-c.log", dump_path="evol-c.dump", 
+function replay_latest(; log_path="evol-1.log", dump_path="evol-1.dump", 
                        a=1, b=2, n=100, fraction=0.9,
                        board_size=19, max_moves=1000)
     events = parse_log(log_path, dump_path, n, fraction)
@@ -91,6 +89,11 @@ function replay_latest(; log_path="evol-c.log", dump_path="evol-c.dump",
         expand!(popn, e)
     end
     named = undump(dump_path)[1]
-    replay_direct(named[popn[end][a].tag], named[popn[end][b].tag], 
-                  board_size, max_moves)
+    ea, eb = named[popn[end][a].tag], named[popn[end][b].tag]
+    if ea > eb
+        ea, eb = eb, ea
+        a, b = b, a
+    end
+    println("black: $(name(ea)):$(a); white: $(name(eb)):$(b)\n")
+    replay_direct(ea, eb, board_size, max_moves)
 end
