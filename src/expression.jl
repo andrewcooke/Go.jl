@@ -111,24 +111,28 @@ function chunkend(s)
     end
 end
 
-const given_atom = 14
-const given_kern = 8
+const given_atom = 16
+const given_kern = 10
 const header = map(UInt8, collect("goxp"))
 const lheader = 7   # 4 chars, 1 version, 2 length
 
 const transforms = ([1 0; 0 1], [0 1; -1 0], [-1 0; 0 -1], [0 -1; 1 0],
                     [1 0; 0 -1], [0 1; 1 0], [-1 0; 0 1], [0 -1; -1 0])
 
-const combines = Dict{Int, Function}(0 => x(p...) = sum(p...) / length(transforms),
-                                     1 => x(p...) = prod(p...),
-                                     2 => x(p...) = maximum(p...) - minimum(p...),
+const combines = Dict{Int, Function}(0 => x(a, d) = sum(a, d) / length(transforms),
+                                     1 => x(a, d) = prod(a, d),
+                                     2 => x(a, d) = maximum(a, d) - minimum(a, d),
                                      3 => minimum,
-                                     4 => maximum)
+                                     4 => maximum,
+                                     5 => x(a, d) = minimum(abs(a), d),
+                                     6 => x(p...) = maximum(abs(a), d))
 const combine_names = Dict{Int, ASCIIString}(0 => "average",
                                              1 => "product",
                                              2 => "range",
                                              3 => "max",
-                                             4 => "min")
+                                             4 => "min",
+                                             5 => "maxabs",
+                                             6 => "minabs")
 
 @enum Operation jump=0 kernel=1 addition=2 product=3 junk=4
 
@@ -365,7 +369,7 @@ end
 
 function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t::Point, index::Index)
     
-    if input == 9
+    if input == 11
         if p.stats.moves == 0
             Float32(0.5)
         elseif isnull(p.stats.prev)
@@ -373,15 +377,15 @@ function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t
         else
             one(Float32)
         end
-    elseif input == 10
-        zero(Float32)
-    elseif input == 11
-        one(Float32)
     elseif input == 12
-        Float32(p.stats.score * Int(t))
+        zero(Float32)
     elseif input == 13
-        Float32(p.stats.owned / (N*N - p.stats.stones))
+        one(Float32)
     elseif input == 14
+        Float32(p.stats.score * Int(t))
+    elseif input == 15
+        Float32(p.stats.owned / (N*N - p.stats.stones))
+    elseif input == 16
         Float32(p.stats.stones)
     elseif 1 <= x <= N && 1 <= y <= N
         if input == 1
@@ -425,6 +429,10 @@ function lookup{N}(f, x, y, e, d::Array{Int8, 3}, input, edge, p::Position{N}, t
             2 * (min(dx, dy) - 1) / N
         elseif input == 8
             2 * min(abs(x-y), abs(N+1-x-y)) / N
+        elseif input == 9
+            x / N
+        elseif input == 10
+            y / N
         else
             i = input-given_atom
             e[i] || evaluate(f, length(f)-i+1, p, t, e, d, index)
@@ -556,12 +564,14 @@ const lookup_dict = Dict{Int,ASCIIString}(1 => "point",
                                           6 => "centre",
                                           7 => "edge",
                                           8 => "diag",
-                                          9 => "prev",
-                                          10 => "zero",
-                                          11 => "one",
-                                          12 => "score",
-                                          13 => "owned%",
-                                          14 => "stones%")
+                                          9 => "x",
+                                          10 => "y",
+                                          11 => "prev",
+                                          12 => "zero",
+                                          13 => "one",
+                                          14 => "score",
+                                          15 => "owned%",
+                                          16 => "stones%")
 
 function lookup_name(input, n, given)
     if input > given
