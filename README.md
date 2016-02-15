@@ -1,5 +1,7 @@
 # Go
 
+***This project is dead, since Google did things better.***
+
 An experimental engine to play
 [go](https://en.wikipedia.org/wiki/Go_%28game%29) (eventually, using a GPU).
 

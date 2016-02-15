@@ -80,7 +80,7 @@ function replay_pair(path, a, b; board_size=19, max_moves=1000)
     replay_direct(d[a], d[b], board_size, max_moves)
 end
 
-function replay_latest(; log_path="evol-1.log", dump_path="evol-1.dump", 
+function replay_latest(; log_path="evol-2.log", dump_path="evol-2.dump", 
                        a=1, b=2, n=100, fraction=0.9,
                        board_size=19, max_moves=1000)
     events = parse_log(log_path, dump_path, n, fraction)
